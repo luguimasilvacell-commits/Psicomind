@@ -52,6 +52,7 @@ export interface Psicologo {
   nome: string
   crp: string
   telefone: string
+  role: 'admin' | 'psicologo'
   created_at: string
   updated_at: string
 }

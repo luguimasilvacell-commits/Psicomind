@@ -11,6 +11,9 @@ interface AuthState {
   signUp: (email: string, password: string, userData: Partial<Psicologo>) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   initialize: () => Promise<void>
+  isAdmin: () => boolean
+  isPsicologo: () => boolean
+  hasRole: (role: 'admin' | 'psicologo') => boolean
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -123,4 +126,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user: null, psicologo: null, loading: false })
     }
   },
+
+  // Funções para verificar roles
+  isAdmin: () => {
+    const { psicologo } = get()
+    return psicologo?.role === 'admin'
+  },
+
+  isPsicologo: () => {
+    const { psicologo } = get()
+    return psicologo?.role === 'psicologo'
+  },
+
+  hasRole: (role: 'admin' | 'psicologo') => {
+    const { psicologo } = get()
+    return psicologo?.role === role
+  }
 }))

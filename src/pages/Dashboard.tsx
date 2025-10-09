@@ -28,6 +28,7 @@ import {
 import { formatCurrency } from '../lib/utils'
 import { StatCardSkeleton, ChartSkeleton, ListSkeleton } from '../components/ui/Skeleton'
 import { useDashboardStats } from '../hooks/useQueries'
+import { useAuthStore } from '../stores/authStore'
 
 
 interface DashboardStats {
@@ -63,6 +64,7 @@ const mockStatusData = [
 
 export default function Dashboard() {
   const { data: stats, isLoading, error } = useDashboardStats()
+  const { psicologo, isAdmin, isPsicologo } = useAuthStore()
 
   // Dados padrão caso não haja dados ainda
   const defaultStats = {
@@ -159,9 +161,26 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Visão geral da sua prática clínica</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Visão geral da sua prática clínica</p>
+        </div>
+        {psicologo && (
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="text-sm font-medium text-gray-900">{psicologo.nome}</p>
+              <p className="text-sm text-gray-500">{psicologo.email}</p>
+            </div>
+            <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+              isAdmin() 
+                ? 'bg-purple-100 text-purple-800' 
+                : 'bg-blue-100 text-blue-800'
+            }`}>
+              {isAdmin() ? '👑 Administrador' : '👨‍⚕️ Psicólogo'}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
