@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "create-vite-init": "^1.0.33"
+  }
+}

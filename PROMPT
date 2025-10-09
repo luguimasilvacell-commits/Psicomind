@@ -1,0 +1,24 @@
+Criar uma aplicação modelo SAAS, com visual intuitivo e moderno e similar a um CRM. 
+
+O público-alvo são psicólogos, que precisam fazer toda a gestão do seu negócio de forma independente. 
+
+Principais Features: 
+
+1) Gestão de pacientes
+2) Gestão de consultas
+3) Gestão de prontuários
+4) Gestão de agendamentos e marcação
+5) Controle Financeiro de entradas e saída
+6) visão de painéis e dashboards sobre os principais indicadores do negócio
+
+Regras de Negócio:  
+
+- Todas as entidades devem ter relacionamento direto entre sí
+- As entidades devem ter o CRUD completo
+- Todos os valores devem seguir o padrão de moeda Brasileira
+- Os painéis e Dashboard devem trazer gráficos e visões modernas de KPI.
+- O sistema de agendamento, deve contar com um agente de AI que através de uma tela de chat, faz a interação com cliente via API da Evolution () ou N8N (). Já o chat, deverá utilizar a LLM da Genini IA.
+
+Visual:
+
+O visual deve ser ao mesno tempo intuito e mordeno, mas sem perder a indentidade visual apropriada para o timpo de negócio.
