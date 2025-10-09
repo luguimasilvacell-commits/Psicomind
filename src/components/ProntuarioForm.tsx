@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
-import { X, Save, User, Calendar, FileText, Stethoscope, Clock, AlertCircle, CheckCircle } from 'lucide-react'
+import { X, Save, User, Calendar, FileText, Stethoscope, Clock, AlertCircle, CheckCircle, Search, ChevronDown } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -47,8 +47,18 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null)
   const [sessionEndTime, setSessionEndTime] = useState<Date | null>(null)
   const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(agendamento || null)
+  const [selectedPacienteId, setSelectedPacienteId] = useState<string>(
+    prontuario?.agendamento?.paciente?.id || agendamento?.paciente?.id || ''
+  )
   const [agendamentosComProntuario, setAgendamentosComProntuario] = useState<Set<string>>(new Set())
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  
+  // Estados para busca de pacientes
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedPacienteName, setSelectedPacienteName] = useState('')
+  const [todosPacientes, setTodosPacientes] = useState<any[]>([])
+  const [loadingPacientes, setLoadingPacientes] = useState(false)
   
   const { 
     criarNovoProntuario, 
@@ -56,6 +66,35 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
     verificarExisteProntuario,
     loading: prontuarioLoading 
   } = useProntuarioSessao()
+
+  // Função para carregar todos os pacientes do psicólogo
+  const carregarTodosPacientes = async () => {
+    if (!psicologo?.id) return
+
+    setLoadingPacientes(true)
+    try {
+      const { data, error } = await supabase
+        .from('pacientes')
+        .select('*')
+        .eq('psicologo_id', psicologo.id)
+        .eq('status', 'ativo')
+        .order('nome', { ascending: true })
+
+      if (error) throw error
+      setTodosPacientes(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar pacientes:', error)
+      toast.error('Erro ao carregar lista de pacientes')
+      setTodosPacientes([])
+    } finally {
+      setLoadingPacientes(false)
+    }
+  }
+
+  // Carregar todos os pacientes quando o componente montar
+  useEffect(() => {
+    carregarTodosPacientes()
+  }, [psicologo?.id])
 
   // Verificar quais agendamentos já possuem prontuários
   useEffect(() => {
@@ -79,12 +118,67 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
     }
   }, [agendamentos, verificarExisteProntuario])
 
+  // Usar todos os pacientes carregados da base de dados
+  const pacientesUnicos = useMemo(() => {
+    return todosPacientes.sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [todosPacientes])
+
+  // Filtrar pacientes baseado no termo de busca
+  const pacientesFiltrados = useMemo(() => {
+    if (!searchTerm.trim()) return pacientesUnicos
+    return pacientesUnicos.filter(paciente => 
+      paciente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      paciente.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      paciente.telefone?.includes(searchTerm)
+    )
+  }, [pacientesUnicos, searchTerm])
+
+  // Inicializar nome do paciente selecionado
+  useEffect(() => {
+    if (selectedPacienteId && pacientesUnicos.length > 0) {
+      const paciente = pacientesUnicos.find(p => p.id === selectedPacienteId)
+      if (paciente) {
+        setSelectedPacienteName(paciente.nome)
+        setSearchTerm(paciente.nome)
+      }
+    }
+  }, [selectedPacienteId, pacientesUnicos])
+
+  // Filtrar agendamentos baseado no paciente selecionado
+  const agendamentosFiltrados = useMemo(() => {
+    console.log('🔍 Filtrando agendamentos para paciente:', selectedPacienteId)
+    console.log('📋 Total de agendamentos disponíveis:', agendamentos.length)
+    
+    if (!selectedPacienteId) {
+      console.log('⚠️ Nenhum paciente selecionado, retornando todos os agendamentos')
+      return agendamentos
+    }
+    
+    const filtrados = agendamentos.filter(a => {
+      const match = a.paciente?.id === selectedPacienteId
+      if (!match) {
+        console.log(`❌ Agendamento ${a.id} não corresponde - paciente: ${a.paciente?.id} vs selecionado: ${selectedPacienteId}`)
+      }
+      return match
+    })
+    
+    console.log(`✅ Agendamentos filtrados para paciente ${selectedPacienteId}:`, filtrados.length)
+    console.log('📊 Agendamentos filtrados:', filtrados.map(a => ({
+      id: a.id,
+      data: a.data_hora,
+      paciente: a.paciente?.nome,
+      pacienteId: a.paciente?.id
+    })))
+    
+    return filtrados
+  }, [agendamentos, selectedPacienteId])
+
   // Função para ordenar agendamentos por proximidade ao horário atual
   const sortedAgendamentos = useMemo(() => {
     const now = new Date()
     const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     
-    return agendamentos
+    return agendamentosFiltrados
       .filter(a => {
         // Mostrar apenas agendamentos futuros, do dia atual ou o agendamento já vinculado ao prontuário
         const agendamentoDate = new Date(a.data_hora)
@@ -111,7 +205,7 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
         
         return aDiff - bDiff
       })
-  }, [agendamentos, prontuario?.agendamento_id])
+  }, [agendamentosFiltrados, prontuario?.agendamento_id])
 
   // Função para determinar o status visual do agendamento
   const getAgendamentoStatus = (agendamento: Agendamento) => {
@@ -130,6 +224,30 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
     } else {
       return { type: 'future', label: 'Futuro', color: 'text-green-600', icon: CheckCircle }
     }
+  }
+
+  // Funções para lidar com a busca de pacientes
+  const handlePacienteSearch = (value: string) => {
+    setSearchTerm(value)
+    setShowDropdown(true)
+  }
+
+  const handlePacienteSelect = (paciente: any) => {
+    console.log('👤 Paciente selecionado:', paciente)
+    setSelectedPacienteId(paciente.id)
+    setSelectedPacienteName(paciente.nome)
+    setSearchTerm(paciente.nome)
+    setShowDropdown(false)
+    handlePacienteChange(paciente.id)
+  }
+
+  const handleInputFocus = () => {
+    setShowDropdown(true)
+  }
+
+  const handleInputBlur = () => {
+    // Delay para permitir clique no dropdown
+    setTimeout(() => setShowDropdown(false), 200)
   }
 
   // Função para formatar a exibição do agendamento
@@ -181,6 +299,14 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
       setSelectedAgendamento(agendamento || null)
     }
   }, [watchedAgendamentoId, agendamentos])
+
+  // Função para lidar com a mudança de paciente
+  const handlePacienteChange = (pacienteId: string) => {
+    setSelectedPacienteId(pacienteId)
+    // Limpar agendamento selecionado quando mudar de paciente
+    setSelectedAgendamento(null)
+    setValue('agendamento_id', '')
+  }
 
   const handleTimeUpdate = useCallback((seconds: number) => {
     setSessionTime(seconds)
@@ -267,7 +393,7 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] form-scrollbar">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
             {prontuario ? 'Editar Prontuário' : 'Novo Prontuário'}
@@ -289,6 +415,74 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
             autoSave={true}
           />
 
+          {/* Busca de Paciente */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <User className="h-4 w-4 inline mr-1" />
+              Paciente *
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => handlePacienteSearch(e.target.value)}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                placeholder={loadingPacientes ? "Carregando pacientes..." : "Digite o nome do paciente..."}
+                disabled={loadingPacientes}
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                {loadingPacientes ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                )}
+              </div>
+            </div>
+            
+            {/* Dropdown de sugestões */}
+            {showDropdown && pacientesFiltrados.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {pacientesFiltrados.map((paciente) => (
+                  <div
+                    key={paciente.id}
+                    onClick={() => handlePacienteSelect(paciente)}
+                    className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-gray-900">{paciente.nome}</div>
+                        {paciente.email && (
+                          <div className="text-sm text-gray-500">{paciente.email}</div>
+                        )}
+                        {paciente.telefone && (
+                          <div className="text-sm text-gray-500">{paciente.telefone}</div>
+                        )}
+                      </div>
+                      {selectedPacienteId === paciente.id && (
+                        <CheckCircle className="h-4 w-4 text-blue-500" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Mensagem quando não há resultados */}
+            {showDropdown && searchTerm && pacientesFiltrados.length === 0 && !loadingPacientes && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                {todosPacientes.length === 0 ? 
+                  "Nenhum paciente cadastrado" : 
+                  `Nenhum paciente encontrado para "${searchTerm}"`
+                }
+              </div>
+            )}
+          </div>
+
           {/* Agendamento */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -298,10 +492,17 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
             <select
               {...register('agendamento_id')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={checkingDuplicates}
+              disabled={checkingDuplicates || !selectedPacienteId}
             >
               <option value="">
-                {checkingDuplicates ? 'Verificando prontuários...' : 'Selecione um agendamento'}
+                {checkingDuplicates 
+                  ? 'Verificando prontuários...' 
+                  : !selectedPacienteId 
+                    ? 'Primeiro selecione um paciente'
+                    : sortedAgendamentos.length === 0
+                      ? `Nenhum agendamento encontrado para ${selectedPacienteName || 'este paciente'}`
+                      : 'Selecione um agendamento'
+                }
               </option>
               {sortedAgendamentos.map((agendamento) => {
                 const display = formatAgendamentoDisplay(agendamento)
@@ -369,6 +570,27 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
             )}
             {errors.agendamento_id && (
               <p className="mt-1 text-sm text-red-600">{errors.agendamento_id.message}</p>
+            )}
+            
+            {/* Status da filtragem de agendamentos */}
+            {selectedPacienteId && (
+              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center text-sm text-gray-600">
+                  <User className="h-4 w-4 mr-2" />
+                  <span>
+                    Mostrando agendamentos para: <strong>{selectedPacienteName}</strong>
+                  </span>
+                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    {sortedAgendamentos.length} agendamento{sortedAgendamentos.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                {sortedAgendamentos.length === 0 && (
+                  <div className="mt-2 text-sm text-amber-600 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Nenhum agendamento encontrado para este paciente
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

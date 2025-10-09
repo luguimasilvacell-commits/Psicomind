@@ -35,7 +35,7 @@ interface PacienteFormProps {
 }
 
 export default function PacienteForm({ paciente, onClose, onSave }: PacienteFormProps) {
-  const { psicologo } = useAuthStore()
+  const { psicologo, user } = useAuthStore()
   const [loading, setLoading] = React.useState(false)
 
   const {
@@ -63,7 +63,7 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
     },
   })
 
-  // Hooks para máscaras
+  // Hooks para máscaras - usando consistentemente os hooks
   const cpfMask = useMaskedInput({
     initialValue: paciente?.cpf || '',
     maskType: 'cpf',
@@ -93,60 +93,158 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
     (value, isoValue) => setValue('data_nascimento', isoValue)
   )
 
-
-
   const onSubmit = async (data: PacienteFormData) => {
-    if (!psicologo?.id) return
+    console.log('🚀 === INÍCIO DO PROCESSO DE SALVAMENTO ===')
+    console.log('📝 Dados do formulário recebidos:', data)
+    
+    console.log('🔐 === DEBUG AUTENTICAÇÃO ===')
+    console.log('Psicologo do store:', psicologo)
+    console.log('User do store:', user)
+    console.log('Psicologo ID:', psicologo?.id)
+    console.log('User ID:', user?.id)
+    
+    // Verificar sessão atual do Supabase
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    console.log('Sessão atual do Supabase:', sessionData.session)
+    console.log('Erro de sessão:', sessionError)
+    
+    if (sessionData.session) {
+      console.log('✅ Sessão ativa - User ID:', sessionData.session.user.id)
+      console.log('Email da sessão:', sessionData.session.user.email)
+    } else {
+      console.log('❌ PROBLEMA: Nenhuma sessão ativa no Supabase!')
+      toast.error('Sessão expirada. Faça login novamente.')
+      return
+    }
 
+    if (!psicologo?.id) {
+      console.log('❌ ERRO: Psicólogo não identificado')
+      toast.error('Erro: Psicólogo não identificado. Faça login novamente.')
+      return
+    }
+
+    console.log('📋 === PREPARANDO DADOS PARA SALVAMENTO ===')
     setLoading(true)
     try {
+      // Obter valores das máscaras
+      const cpfValue = cpfMask.getRawValue()
+      const telefoneValue = telefoneMask.getRawValue()
+      const cepValue = cepMask.getRawValue()
+      const contatoEmergenciaValue = contatoEmergenciaMask.getRawValue()
+      const dataNascimentoValue = dataNascimento.getISOValue()
+
+      console.log('🎭 Valores das máscaras:')
+      console.log('- CPF:', cpfValue)
+      console.log('- Telefone:', telefoneValue)
+      console.log('- CEP:', cepValue)
+      console.log('- Contato Emergência:', contatoEmergenciaValue)
+      console.log('- Data Nascimento:', dataNascimentoValue)
+
       const pacienteData = {
         ...data,
         psicologo_id: psicologo.id,
-        cpf: cpfMask.getRawValue() || null,
-        telefone: telefoneMask.getRawValue(),
-        cep: cepMask.getRawValue() || null,
-        contato_emergencia: contatoEmergenciaMask.getRawValue() || null,
-        data_nascimento: dataNascimento.getISOValue() || null,
+        cpf: cpfValue || null,
+        telefone: telefoneValue,
+        cep: cepValue || null,
+        contato_emergencia: contatoEmergenciaValue || null,
+        data_nascimento: dataNascimentoValue || null,
         email: data.email || null,
       }
 
+      // Validação adicional antes do salvamento
+      console.log('🔍 === VALIDAÇÃO ADICIONAL ===')
+      
+      // Verificar se telefone está preenchido (campo obrigatório)
+      if (!telefoneValue || telefoneValue.length < 10) {
+        console.log('❌ ERRO: Telefone inválido ou não preenchido')
+        toast.error('Telefone é obrigatório e deve ter pelo menos 10 dígitos')
+        return
+      }
+
+      // Log detalhado para debug do campo estado
+      console.log('🏛️ === DEBUG CAMPO ESTADO ===')
+      console.log('Valor original do form data.estado:', data.estado)
+      console.log('Tipo do valor:', typeof data.estado)
+      console.log('Valor no pacienteData.estado:', pacienteData.estado)
+      console.log('Tipo do valor no pacienteData:', typeof pacienteData.estado)
+      console.log('É string vazia?:', data.estado === '')
+      console.log('É undefined?:', data.estado === undefined)
+      console.log('É null?:', data.estado === null)
+      
+      // CORREÇÃO: Converter string vazia para null para evitar erro da constraint
+      if (pacienteData.estado === '') {
+        console.log('🔧 CORREÇÃO: Convertendo string vazia para null')
+        pacienteData.estado = null
+      }
+      
+      // CORREÇÃO: Converter string vazia para null para evitar erro da constraint do estado_civil
+      if (pacienteData.estado_civil === '') {
+        console.log('🔧 CORREÇÃO: Convertendo estado_civil string vazia para null')
+        pacienteData.estado_civil = null
+      }
+      
+      console.log('✅ Valor final do estado após correção:', pacienteData.estado)
+      console.log('📊 Dados completos do paciente:', JSON.stringify(pacienteData, null, 2))
+
+      console.log('💾 === SALVANDO NO BANCO DE DADOS ===')
       if (paciente) {
         // Atualizar paciente existente
+        console.log('🔄 Atualizando paciente existente ID:', paciente.id)
         const { error } = await supabase
           .from('pacientes')
           .update(pacienteData)
           .eq('id', paciente.id)
 
-        if (error) throw error
+        if (error) {
+          console.log('❌ ERRO na atualização:', error)
+          throw error
+        }
+        console.log('✅ Paciente atualizado com sucesso!')
         toast.success('Paciente atualizado com sucesso!')
       } else {
         // Criar novo paciente
+        console.log('➕ Criando novo paciente')
         const { error } = await supabase
           .from('pacientes')
           .insert(pacienteData)
 
-        if (error) throw error
+        if (error) {
+          console.log('❌ === ERRO DETALHADO NA CRIAÇÃO ===')
+          console.log('Código do erro:', error.code)
+          console.log('Mensagem:', error.message)
+          console.log('Detalhes:', error.details)
+          console.log('Hint:', error.hint)
+          console.log('=====================================')
+          
+          if (error.code === '23514') {
+            toast.error(`Erro na constraint check_estado: ${error.message}. Valor do estado: "${pacienteData.estado}"`)
+          } else if (error.code === '42501') {
+            toast.error(`Erro de permissão (RLS): ${error.message}. Verifique se você está logado corretamente.`)
+          } else {
+            throw error
+          }
+          return
+        }
+        console.log('✅ Paciente criado com sucesso!')
         toast.success('Paciente cadastrado com sucesso!')
       }
 
+      console.log('🎉 === SALVAMENTO CONCLUÍDO COM SUCESSO ===')
       onSave()
       onClose()
     } catch (error: any) {
-      console.error('Erro ao salvar paciente:', error)
-      if (error.code === '23505') {
-        toast.error('CPF já cadastrado para outro paciente')
-      } else {
-        toast.error('Erro ao salvar paciente')
-      }
+      console.error('💥 ERRO CRÍTICO ao salvar paciente:', error)
+      console.error('Stack trace:', error.stack)
+      toast.error(`Erro ao salvar paciente: ${error.message}`)
     } finally {
+      console.log('🏁 === FINALIZANDO PROCESSO DE SALVAMENTO ===')
       setLoading(false)
     }
   }
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] form-scrollbar scroll-indicator overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
             {paciente ? 'Editar Paciente' : 'Novo Paciente'}
@@ -159,7 +257,7 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Dados Pessoais */}
           <div>
             <h4 className="text-md font-medium text-gray-900 mb-4">Dados Pessoais</h4>
@@ -187,10 +285,9 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                 <input
                   type="text"
                   value={cpfMask.value}
-                  onChange={(e) => cpfMask.onChange(e.target.value)}
+                  onChange={cpfMask.onChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="000.000.000-00"
-                  maxLength={14}
                 />
                 {errors.cpf && (
                   <p className="mt-1 text-sm text-red-600">{errors.cpf.message}</p>
@@ -199,19 +296,18 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Calendar className="h-4 w-4 inline mr-1" />
-                  Data de Nascimento
+                  <Phone className="h-4 w-4 inline mr-1" />
+                  Telefone *
                 </label>
                 <input
                   type="text"
-                  value={dataNascimento.displayValue}
-                  onChange={(e) => dataNascimento.onChange(e.target.value)}
+                  value={telefoneMask.value}
+                  onChange={telefoneMask.onChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
+                  placeholder="(11) 99999-9999"
                 />
-                {errors.data_nascimento && (
-                  <p className="mt-1 text-sm text-red-600">{errors.data_nascimento.message}</p>
+                {errors.telefone && (
+                  <p className="mt-1 text-sm text-red-600">{errors.telefone.message}</p>
                 )}
               </div>
 
@@ -230,29 +326,19 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                   <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
                 )}
               </div>
-            </div>
-          </div>
 
-          {/* Contato */}
-          <div>
-            <h4 className="text-md font-medium text-gray-900 mb-4">Contato</h4>
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Phone className="h-4 w-4 inline mr-1" />
-                  Telefone *
+                  <Calendar className="h-4 w-4 inline mr-1" />
+                  Data de Nascimento
                 </label>
                 <input
                   type="text"
-                  value={telefoneMask.value}
-                  onChange={(e) => telefoneMask.onChange(e.target.value)}
+                  value={dataNascimento.value}
+                  onChange={dataNascimento.onChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="(11) 99999-9999"
-                  maxLength={15}
+                  placeholder="dd/mm/aaaa"
                 />
-                {errors.telefone && (
-                  <p className="mt-1 text-sm text-red-600">{errors.telefone.message}</p>
-                )}
               </div>
             </div>
           </div>
@@ -269,10 +355,9 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                 <input
                   type="text"
                   value={cepMask.value}
-                  onChange={(e) => cepMask.onChange(e.target.value)}
+                  onChange={cepMask.onChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="00000-000"
-                  maxLength={9}
                 />
                 {errors.cep && (
                   <p className="mt-1 text-sm text-red-600">{errors.cep.message}</p>
@@ -287,7 +372,7 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                   {...register('cidade')}
                   type="text"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Cidade"
+                  placeholder="Nome da cidade"
                 />
               </div>
 
@@ -388,10 +473,9 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                 <input
                   type="text"
                   value={contatoEmergenciaMask.value}
-                  onChange={(e) => contatoEmergenciaMask.onChange(e.target.value)}
+                  onChange={contatoEmergenciaMask.onChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="(11) 99999-9999"
-                  maxLength={15}
                 />
                 {errors.contato_emergencia && (
                   <p className="mt-1 text-sm text-red-600">{errors.contato_emergencia.message}</p>
@@ -400,34 +484,43 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <FileText className="h-4 w-4 inline mr-1" />
                   Observações
                 </label>
                 <textarea
                   {...register('observacoes')}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Observações gerais sobre o paciente..."
+                  placeholder="Observações adicionais sobre o paciente..."
                 />
               </div>
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Botões */}
           <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
-              {loading ? 'Salvando...' : 'Salvar'}
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {paciente ? 'Atualizar' : 'Cadastrar'}
+                </>
+              )}
             </button>
           </div>
         </form>

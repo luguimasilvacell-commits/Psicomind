@@ -189,39 +189,44 @@ export default function HistoricoPaciente({
                   <div className="flex items-center space-x-2">
                     {/* Status do Prontuário */}
                     {sessao.tem_prontuario ? (
-                      <div className="flex items-center space-x-1">
-                        <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium flex items-center">
-                          <Link className="h-3 w-3 mr-1" />
+                      <div className="flex items-center space-x-2">
+                        <div className="bg-green-100 text-green-800 px-3 py-1 rounded-lg text-sm font-medium flex items-center">
+                          <FileText className="h-4 w-4 mr-2" />
                           Prontuário Vinculado
                         </div>
-                        {onViewProntuario && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onViewProntuario(sessao.prontuario_id!)
-                            }}
-                            className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
-                            title="Visualizar Prontuário"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </button>
-                        )}
-                        {onEditProntuario && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onEditProntuario(sessao.prontuario_id!, sessao.agendamento_id)
-                            }}
-                            className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50"
-                            title="Editar Prontuário"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </button>
-                        )}
+                        <div className="flex items-center space-x-1">
+                          {onViewProntuario && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onViewProntuario(sessao.prontuario_id!)
+                              }}
+                              className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded-lg text-sm font-medium flex items-center transition-colors"
+                              title="Visualizar Prontuário"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Ver
+                            </button>
+                          )}
+                          {onEditProntuario && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onEditProntuario(sessao.prontuario_id!, sessao.agendamento_id)
+                              }}
+                              className="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1 rounded-lg text-sm font-medium flex items-center transition-colors"
+                              title="Editar Prontuário"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Editar
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
-                      <div className="flex items-center space-x-1">
-                        <div className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
+                      <div className="flex items-center space-x-2">
+                        <div className="bg-orange-100 text-orange-700 px-3 py-1 rounded-lg text-sm font-medium flex items-center">
+                          <FileText className="h-4 w-4 mr-2" />
                           Sem Prontuário
                         </div>
                         {onCreateProntuario && sessao.status_sessao === 'finalizada' && (
@@ -230,20 +235,15 @@ export default function HistoricoPaciente({
                               e.stopPropagation()
                               onCreateProntuario(sessao.agendamento_id)
                             }}
-                            className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
+                            className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded-lg text-sm font-medium flex items-center transition-colors"
                             title="Criar Prontuário"
                           >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-4 w-4 mr-1" />
+                            Criar
                           </button>
                         )}
                       </div>
                     )}
-                    
-                    {/* Indicador de Relacionamento */}
-                    <div className="flex items-center text-xs text-gray-500">
-                      <Link className="h-3 w-3 mr-1" />
-                      ID: {sessao.agendamento_id.slice(-8)}
-                    </div>
                     
                     {expandedSessao === sessao.agendamento_id ? (
                       <ChevronUp className="h-5 w-5 text-gray-400" />
@@ -299,27 +299,50 @@ export default function HistoricoPaciente({
                     <div>
                       <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                         <Link className="h-4 w-4 mr-1 text-purple-600" />
-                        Relacionamentos
+                        Vínculo Agendamento-Prontuário
                       </h4>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <div><span className="font-medium">ID Agendamento:</span> 
-                          <code className="ml-1 text-xs bg-gray-200 px-1 rounded">{sessao.agendamento_id}</code>
-                        </div>
-                        {sessao.prontuario_id && (
-                          <div><span className="font-medium">ID Prontuário:</span> 
-                            <code className="ml-1 text-xs bg-gray-200 px-1 rounded">{sessao.prontuario_id}</code>
+                      <div className="space-y-3 text-sm">
+                        {/* Status do Vínculo */}
+                        <div className={`p-3 rounded-lg border-2 ${
+                          sessao.tem_prontuario 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-orange-50 border-orange-200'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <div className={`w-4 h-4 rounded-full mr-3 ${
+                                sessao.tem_prontuario ? 'bg-green-500' : 'bg-orange-400'
+                              }`}></div>
+                              <span className={`font-medium ${
+                                sessao.tem_prontuario ? 'text-green-800' : 'text-orange-800'
+                              }`}>
+                                {sessao.tem_prontuario ? 'Prontuário Vinculado' : 'Sem Prontuário'}
+                              </span>
+                            </div>
+                            {sessao.tem_prontuario && (
+                              <FileText className="h-4 w-4 text-green-600" />
+                            )}
                           </div>
-                        )}
-                        {sessao.prontuario_criado_em && (
-                          <div><span className="font-medium">Prontuário criado em:</span> {new Date(sessao.prontuario_criado_em).toLocaleDateString('pt-BR')}</div>
-                        )}
-                        <div className="flex items-center mt-2">
-                          <div className={`w-3 h-3 rounded-full mr-2 ${
-                            sessao.tem_prontuario ? 'bg-green-500' : 'bg-gray-300'
-                          }`}></div>
-                          <span className="text-xs">
-                            {sessao.tem_prontuario ? 'Agendamento → Prontuário' : 'Agendamento sem prontuário'}
-                          </span>
+                          
+                          {sessao.tem_prontuario && sessao.prontuario_criado_em && (
+                            <div className="mt-2 text-xs text-green-700">
+                              Criado em: {new Date(sessao.prontuario_criado_em).toLocaleDateString('pt-BR')} às {new Date(sessao.prontuario_criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* IDs Técnicos */}
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div>
+                            <span className="font-medium">Agendamento:</span> 
+                            <code className="ml-1 bg-gray-100 px-1 rounded">{sessao.agendamento_id.slice(-12)}</code>
+                          </div>
+                          {sessao.prontuario_id && (
+                            <div>
+                              <span className="font-medium">Prontuário:</span> 
+                              <code className="ml-1 bg-gray-100 px-1 rounded">{sessao.prontuario_id.slice(-12)}</code>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

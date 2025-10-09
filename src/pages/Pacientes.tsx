@@ -18,6 +18,26 @@ function Pacientes() {
   const [showHistorico, setShowHistorico] = useState(false)
   const [pacienteHistorico, setPacienteHistorico] = useState<Paciente | null>(null)
 
+  // Funções auxiliares para formatação segura
+  const formatCPF = (cpf: string | null | undefined): string => {
+    if (!cpf) return 'Não informado'
+    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+  }
+
+  const formatTelefone = (telefone: string | null | undefined): string => {
+    if (!telefone) return 'Não informado'
+    return telefone.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3')
+  }
+
+  const formatDataNascimento = (data: string | null | undefined): string => {
+    if (!data) return 'Não informado'
+    try {
+      return formatDate(data)
+    } catch (error) {
+      return 'Data inválida'
+    }
+  }
+
   const loadPacientes = async () => {
     if (!psicologo?.id) {
       setLoading(false)
@@ -53,8 +73,8 @@ function Pacientes() {
 
   const filteredPacientes = pacientes.filter(paciente => {
     const matchesSearch = paciente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         paciente.cpf.includes(searchTerm) ||
-                         paciente.telefone.includes(searchTerm)
+                         (paciente.cpf && paciente.cpf.includes(searchTerm)) ||
+                         (paciente.telefone && paciente.telefone.includes(searchTerm))
     
     const matchesStatus = statusFilter === 'todos' || paciente.status === statusFilter
     
@@ -285,7 +305,7 @@ function Pacientes() {
                           {paciente.nome}
                         </div>
                         <div className="text-sm text-gray-500">
-                          CPF: {paciente.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
+                          CPF: {formatCPF(paciente.cpf)}
                         </div>
                       </div>
                     </td>
@@ -293,7 +313,7 @@ function Pacientes() {
                       <div className="space-y-1">
                         <div className="flex items-center text-sm text-gray-900">
                           <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                          {paciente.telefone.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3')}
+                          {formatTelefone(paciente.telefone)}
                         </div>
                         {paciente.email && (
                           <div className="flex items-center text-sm text-gray-500">
@@ -306,7 +326,7 @@ function Pacientes() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                        {formatDate(paciente.data_nascimento)}
+                        {formatDataNascimento(paciente.data_nascimento)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

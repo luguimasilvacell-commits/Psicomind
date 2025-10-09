@@ -23,12 +23,10 @@ const Pacientes = React.lazy(() => import('./pages/Pacientes'))
 const Agendamentos = React.lazy(() => import('./pages/Agendamentos'))
 const Prontuarios = React.lazy(() => import('./pages/Prontuarios'))
 const Financeiro = React.lazy(() => import('./pages/Financeiro'))
-const ChatIA = React.lazy(() => import('./pages/Chat'))
-const Templates = React.lazy(() => import('./pages/Templates'))
-const ChatHistory = React.lazy(() => import('./pages/ChatHistory'))
-const AIAnalytics = React.lazy(() => import('./pages/AIAnalytics'))
 const SystemLogs = React.lazy(() => import('./pages/SystemLogs'))
 const Relatorios = React.lazy(() => import('./pages/Relatorios'))
+const Chat = React.lazy(() => import('./pages/Chat'))
+const ConfiguracaoWhatsApp = React.lazy(() => import('./pages/ConfiguracaoWhatsApp'))
 
 // Placeholder for configurations (not implemented yet)
 const Configuracoes = React.lazy(() => 
@@ -85,26 +83,6 @@ export default function App() {
                 <Financeiro />
               </PageLoader>
             } />
-            <Route path="chat-ia" element={
-              <PageLoader>
-                <ChatIA />
-              </PageLoader>
-            } />
-            <Route path="templates" element={
-              <PageLoader>
-                <Templates />
-              </PageLoader>
-            } />
-            <Route path="chat-history" element={
-              <PageLoader>
-                <ChatHistory />
-              </PageLoader>
-            } />
-            <Route path="/ai-analytics" element={
-              <PageLoader>
-                <AIAnalytics />
-              </PageLoader>
-            } />
             <Route path="/system-logs" element={
               <PageLoader>
                 <SystemLogs />
@@ -113,6 +91,16 @@ export default function App() {
             <Route path="relatorios" element={
               <PageLoader>
                 <Relatorios />
+              </PageLoader>
+            } />
+            <Route path="chat" element={
+              <PageLoader>
+                <Chat />
+              </PageLoader>
+            } />
+            <Route path="chat/configuracao" element={
+              <PageLoader>
+                <ConfiguracaoWhatsApp />
               </PageLoader>
             } />
             <Route path="configuracoes" element={

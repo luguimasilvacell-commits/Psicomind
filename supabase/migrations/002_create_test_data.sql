@@ -1,3 +1,7 @@
+-- DADOS DE TESTE REMOVIDOS - Migration 20250109_clean_test_data.sql
+-- Para reativar dados de teste, descomente as linhas abaixo
+
+/*
 -- Inserir psicólogo de teste
 INSERT INTO psicologos (id, email, nome, crp, telefone, senha_hash)
 VALUES (
@@ -36,3 +40,4 @@ VALUES
     'Rua Augusta, 789 - São Paulo, SP',
     '1da6af50-2658-4047-873e-04ba7fde3e52'
   )
+*/

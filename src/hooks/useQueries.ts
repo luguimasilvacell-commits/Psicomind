@@ -183,6 +183,7 @@ export const useDashboardStats = () => {
         .from('pacientes')
         .select('*', { count: 'exact', head: true })
         .eq('psicologo_id', psicologo.id)
+        .eq('status', 'ativo')
       
       // Buscar agendamentos de hoje
       const today = new Date().toISOString().split('T')[0]
@@ -200,12 +201,40 @@ export const useDashboardStats = () => {
         .select('valor')
         .eq('psicologo_id', psicologo.id)
         .eq('tipo', 'receita')
+        .eq('status', 'pago')
         .gte('data_transacao', firstDayOfMonth)
       
-      const receitaMensal = transacoes?.reduce((sum, t) => sum + t.valor, 0) || 0
+      const receitaMensal = transacoes?.reduce((sum, t) => sum + Number(t.valor), 0) || 0
       
-      // Prontuários pendentes (simulado)
-      const prontuariosPendentes = Math.floor(Math.random() * 10) + 1
+      // Buscar prontuários pendentes (agendamentos realizados sem prontuário)
+      const { data: agendamentosRealizados, error: agendamentosError } = await supabase
+        .from('agendamentos')
+        .select('id')
+        .eq('psicologo_id', psicologo.id)
+        .eq('status', 'realizado')
+      
+      let prontuariosPendentes = 0
+      
+      if (!agendamentosError && agendamentosRealizados && agendamentosRealizados.length > 0) {
+        const agendamentoIds = agendamentosRealizados.map(a => a.id)
+        
+        try {
+          const { data: prontuariosExistentes, error: prontuariosError } = await supabase
+            .from('prontuarios')
+            .select('agendamento_id')
+            .in('agendamento_id', agendamentoIds)
+            .not('agendamento_id', 'is', null)
+          
+          if (!prontuariosError && prontuariosExistentes) {
+            const prontuariosIds = prontuariosExistentes.map(p => p.agendamento_id).filter(Boolean)
+            prontuariosPendentes = agendamentoIds.filter(id => !prontuariosIds.includes(id)).length
+          }
+        } catch (error) {
+          // Se houver erro ao buscar prontuários, assumir 0 pendentes
+          console.warn('Erro ao buscar prontuários:', error)
+          prontuariosPendentes = 0
+        }
+      }
       
       return {
         totalPacientes: totalPacientes || 0,
@@ -213,6 +242,248 @@ export const useDashboardStats = () => {
         receitaMensal,
         prontuariosPendentes,
       }
+    },
+    enabled: !!psicologo?.id,
+    staleTime: 2 * 60 * 1000, // 2 minutos
+  })
+}
+
+// Hook para dados de receita mensal (últimos 6 meses)
+export const useRevenueData = () => {
+  const { psicologo } = useAuthStore()
+  
+  return useQuery({
+    queryKey: ['dashboard', 'revenue', psicologo?.id],
+    queryFn: async () => {
+      if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
+      
+      const months = []
+      const now = new Date()
+      
+      // Gerar últimos 6 meses
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const startDate = date.toISOString().split('T')[0]
+        const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]
+        
+        const { data: transacoes } = await supabase
+          .from('transacoes_financeiras')
+          .select('valor')
+          .eq('psicologo_id', psicologo.id)
+          .eq('tipo', 'receita')
+          .eq('status', 'pago')
+          .gte('data_transacao', startDate)
+          .lte('data_transacao', endDate)
+        
+        const revenue = transacoes?.reduce((sum, t) => sum + Number(t.valor), 0) || 0
+        
+        months.push({
+          month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+          revenue
+        })
+      }
+      
+      return months
+    },
+    enabled: !!psicologo?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutos
+  })
+}
+
+// Hook para dados de agendamentos por status
+export const useAppointmentStatusData = () => {
+  const { psicologo } = useAuthStore()
+  
+  return useQuery({
+    queryKey: ['dashboard', 'appointment-status', psicologo?.id],
+    queryFn: async () => {
+      if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
+      
+      // Buscar agendamentos do mês atual
+      const now = new Date()
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+      
+      const { data: agendamentos } = await supabase
+        .from('agendamentos')
+        .select('status')
+        .eq('psicologo_id', psicologo.id)
+        .gte('data_hora', `${firstDayOfMonth}T00:00:00`)
+        .lte('data_hora', `${lastDayOfMonth}T23:59:59`)
+      
+      if (!agendamentos || agendamentos.length === 0) {
+        return [
+          { name: 'Confirmados', value: 0, color: '#059669' },
+          { name: 'Agendados', value: 0, color: '#F59E0B' },
+          { name: 'Cancelados', value: 0, color: '#EF4444' },
+          { name: 'Realizados', value: 0, color: '#3B82F6' },
+        ]
+      }
+      
+      const total = agendamentos.length
+      const statusCount = agendamentos.reduce((acc, agendamento) => {
+        acc[agendamento.status] = (acc[agendamento.status] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      return [
+        { 
+          name: 'Confirmados', 
+          value: Math.round(((statusCount.confirmado || 0) / total) * 100),
+          color: '#059669' 
+        },
+        { 
+          name: 'Agendados', 
+          value: Math.round(((statusCount.agendado || 0) / total) * 100),
+          color: '#F59E0B' 
+        },
+        { 
+          name: 'Cancelados', 
+          value: Math.round(((statusCount.cancelado || 0) / total) * 100),
+          color: '#EF4444' 
+        },
+        { 
+          name: 'Realizados', 
+          value: Math.round(((statusCount.realizado || 0) / total) * 100),
+          color: '#3B82F6' 
+        },
+      ]
+    },
+    enabled: !!psicologo?.id,
+    staleTime: 3 * 60 * 1000, // 3 minutos
+  })
+}
+
+// Hook para dados de agendamentos por dia da semana
+export const useWeeklyAppointmentData = () => {
+  const { psicologo } = useAuthStore()
+  
+  return useQuery({
+    queryKey: ['dashboard', 'weekly-appointments', psicologo?.id],
+    queryFn: async () => {
+      if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
+      
+      // Buscar agendamentos das últimas 4 semanas
+      const now = new Date()
+      const fourWeeksAgo = new Date(now.getTime() - (28 * 24 * 60 * 60 * 1000))
+      
+      const { data: agendamentos } = await supabase
+        .from('agendamentos')
+        .select('data_hora')
+        .eq('psicologo_id', psicologo.id)
+        .gte('data_hora', fourWeeksAgo.toISOString())
+        .lte('data_hora', now.toISOString())
+      
+      const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+      const dayCount = Array(7).fill(0)
+      
+      agendamentos?.forEach(agendamento => {
+        const date = new Date(agendamento.data_hora)
+        const dayOfWeek = date.getDay()
+        dayCount[dayOfWeek]++
+      })
+      
+      return weekDays.map((day, index) => ({
+        day,
+        appointments: dayCount[index]
+      }))
+    },
+    enabled: !!psicologo?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutos
+  })
+}
+
+// Hook para atividades recentes
+export const useRecentActivities = () => {
+  const { psicologo } = useAuthStore()
+  
+  return useQuery({
+    queryKey: ['dashboard', 'recent-activities', psicologo?.id],
+    queryFn: async () => {
+      if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
+      
+      const activities = []
+      
+      // Últimos agendamentos criados
+      const { data: recentAgendamentos } = await supabase
+        .from('agendamentos')
+        .select(`
+          id,
+          data_hora,
+          status,
+          created_at,
+          paciente:pacientes(nome)
+        `)
+        .eq('psicologo_id', psicologo.id)
+        .order('created_at', { ascending: false })
+        .limit(3)
+      
+      recentAgendamentos?.forEach(agendamento => {
+        activities.push({
+          type: 'agendamento',
+          title: 'Agendamento criado',
+          description: `${agendamento.paciente?.nome} - ${new Date(agendamento.data_hora).toLocaleDateString('pt-BR')}`,
+          time: agendamento.created_at,
+          icon: 'calendar',
+          color: 'blue'
+        })
+      })
+      
+      // Últimos prontuários criados
+      const { data: recentProntuarios } = await supabase
+        .from('prontuarios')
+        .select(`
+          id,
+          created_at,
+          agendamento:agendamentos(
+            paciente:pacientes(nome)
+          )
+        `)
+        .eq('psicologo_id', psicologo.id)
+        .order('created_at', { ascending: false })
+        .limit(3)
+      
+      recentProntuarios?.forEach(prontuario => {
+        activities.push({
+          type: 'prontuario',
+          title: 'Prontuário criado',
+          description: `${prontuario.agendamento?.paciente?.nome}`,
+          time: prontuario.created_at,
+          icon: 'file-text',
+          color: 'green'
+        })
+      })
+      
+      // Últimas transações
+      const { data: recentTransacoes } = await supabase
+        .from('transacoes_financeiras')
+        .select(`
+          id,
+          valor,
+          tipo,
+          descricao,
+          created_at,
+          paciente:pacientes(nome)
+        `)
+        .eq('psicologo_id', psicologo.id)
+        .order('created_at', { ascending: false })
+        .limit(2)
+      
+      recentTransacoes?.forEach(transacao => {
+        activities.push({
+          type: 'transacao',
+          title: transacao.tipo === 'receita' ? 'Receita registrada' : 'Despesa registrada',
+          description: `${transacao.paciente?.nome || transacao.descricao} - R$ ${Number(transacao.valor).toFixed(2)}`,
+          time: transacao.created_at,
+          icon: 'dollar-sign',
+          color: transacao.tipo === 'receita' ? 'green' : 'red'
+        })
+      })
+      
+      // Ordenar por data mais recente
+      return activities
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .slice(0, 5)
     },
     enabled: !!psicologo?.id,
     staleTime: 2 * 60 * 1000, // 2 minutos

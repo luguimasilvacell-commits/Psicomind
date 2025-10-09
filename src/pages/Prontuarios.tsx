@@ -47,18 +47,41 @@ function Prontuarios() {
     if (!psicologo?.id) return
 
     try {
-      // Primeiro, buscar todos os agendamentos finalizados
+      console.log('🔍 Carregando agendamentos para prontuários...')
+      
+      // Buscar agendamentos confirmados, realizados e finalizados (mais flexível)
       const { data: agendamentosData, error: agendamentosError } = await supabase
         .from('agendamentos')
         .select(`
-          *,
-          paciente:pacientes(*)
+          id,
+          data_hora,
+          duracao_minutos,
+          tipo,
+          status,
+          status_sessao,
+          observacoes,
+          valor,
+          paciente_id,
+          psicologo_id,
+          paciente:pacientes(
+            id,
+            nome,
+            email,
+            telefone,
+            data_nascimento,
+            status
+          )
         `)
         .eq('psicologo_id', psicologo.id)
-        .eq('status_sessao', 'finalizada')
+        .in('status', ['confirmado', 'realizado'])
         .order('data_hora', { ascending: false })
 
-      if (agendamentosError) throw agendamentosError
+      console.log('📊 Agendamentos encontrados:', agendamentosData?.length || 0)
+
+      if (agendamentosError) {
+        console.error('❌ Erro ao buscar agendamentos:', agendamentosError)
+        throw agendamentosError
+      }
 
       // Depois, buscar todos os prontuários para filtrar agendamentos que já têm prontuário
       const { data: prontuariosData, error: prontuariosError } = await supabase
@@ -66,15 +89,24 @@ function Prontuarios() {
         .select('agendamento_id')
         .eq('psicologo_id', psicologo.id)
 
-      if (prontuariosError) throw prontuariosError
+      if (prontuariosError) {
+        console.error('❌ Erro ao buscar prontuários:', prontuariosError)
+        throw prontuariosError
+      }
+
+      console.log('📋 Prontuários existentes:', prontuariosData?.length || 0)
 
       // Filtrar agendamentos que não têm prontuário
       const agendamentosComProntuario = new Set(prontuariosData?.map(p => p.agendamento_id) || [])
       const agendamentosSemProntuario = agendamentosData?.filter(a => !agendamentosComProntuario.has(a.id)) || []
 
+      console.log('✅ Agendamentos sem prontuário:', agendamentosSemProntuario.length)
+      console.log('👥 Pacientes únicos:', [...new Set(agendamentosSemProntuario.map(a => a.paciente?.nome))].join(', '))
+
       setAgendamentos(agendamentosSemProntuario)
     } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error)
+      console.error('💥 Erro ao carregar agendamentos:', error)
+      toast.error('Erro ao carregar agendamentos para prontuários')
     }
   }
 

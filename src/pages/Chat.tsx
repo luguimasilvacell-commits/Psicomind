@@ -1,610 +1,651 @@
-import React from 'react'
-import { Send, Bot, User, MessageSquare, Settings, Zap, Brain, Phone, AlertTriangle, Heart, TrendingUp, ChevronDown, Users } from 'lucide-react'
-import { supabase, type ChatHistorico, type Paciente } from '../lib/supabase'
-import { useAuthStore } from '../stores/authStore'
-import { formatDate } from '../lib/utils'
-import { toast } from 'sonner'
-import ChatSettings from '../components/ChatSettings'
-import PacienteSelectionModal from '../components/PacienteSelectionModal'
-import { useChatAI } from '../hooks/useChatAI'
+/**
+ * Página principal do sistema de Chat WhatsApp
+ * Lista de conversas e interface de chat individual
+ */
 
-export default function Chat() {
-  const { psicologo } = useAuthStore()
-  const { 
-    messages: aiMessages, 
-    status, 
-    loading: aiLoading,
-    sendMessageToGemini, 
-    processMessage,
-    analyzeSentiment,
-    clearMessages,
-    addMessage,
-    sendWhatsAppMessage
-  } = useChatAI()
-  
-  const [inputMessage, setInputMessage] = React.useState('')
-  const [chatHistory, setChatHistory] = React.useState<ChatHistorico[]>([])
-  const [selectedChat, setSelectedChat] = React.useState<string | null>(null)
-  const [showSettings, setShowSettings] = React.useState(false)
-  const [sentimentAnalysis, setSentimentAnalysis] = React.useState<any>(null)
-  const messagesEndRef = React.useRef<HTMLDivElement>(null)
-  
-  // Estados para conversa com pacientes
-  const [chatMode, setChatMode] = React.useState<'ai' | 'patient'>('ai')
-  const [selectedPaciente, setSelectedPaciente] = React.useState<Paciente | null>(null)
-  const [showPacienteModal, setShowPacienteModal] = React.useState(false)
-  const [showNewChatDropdown, setShowNewChatDropdown] = React.useState(false)
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageCircle, Send, Search, Settings, Phone, Clock, Check, CheckCheck, Wifi, WifiOff } from 'lucide-react';
+import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { toast } from 'sonner';
+import type { Conversa, Mensagem, ChatStats } from '../types/chat';
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+interface ConversaComPreview {
+  id: string;
+  psicologo_id: string;
+  paciente_id: string;
+  ultima_mensagem: string;
+  ativa: boolean;
+  mensagens_nao_lidas: number;
+  created_at: string;
+  updated_at: string;
+  paciente: {
+    id: string;
+    nome: string;
+    telefone: string;
+    email?: string;
+  };
+  preview_mensagem: string;
+}
 
-  React.useEffect(() => {
-    scrollToBottom()
-  }, [aiMessages])
+const Chat: React.FC = () => {
+  console.log('🎯 [DEBUG] Componente Chat carregado!');
+  const { user } = useAuthStore();
+  const [conversas, setConversas] = useState<ConversaComPreview[]>([]);
+  const [conversaSelecionada, setConversaSelecionada] = useState<ConversaComPreview | null>(null);
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [novaMensagem, setNovaMensagem] = useState('');
+  const [busca, setBusca] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [enviandoMensagem, setEnviandoMensagem] = useState(false);
+  const [stats, setStats] = useState<ChatStats | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [usuariosDigitando, setUsuariosDigitando] = useState<Set<string>>(new Set());
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
-  React.useEffect(() => {
-    loadChatHistory()
-  }, [psicologo?.id])
-
-  // Fechar dropdown quando clicar fora
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showNewChatDropdown) {
-        setShowNewChatDropdown(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showNewChatDropdown])
-
-  const loadChatHistory = async () => {
-    if (!psicologo?.id) return
-
-    try {
-      const { data, error } = await supabase
-        .from('chat_historico')
-        .select('*')
-        .eq('psicologo_id', psicologo.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setChatHistory(data || [])
-    } catch (error) {
-      console.error('Erro ao carregar histórico:', error)
-    }
-  }
-
-  const saveChatMessage = async (message: string, response: string) => {
-    if (!psicologo?.id) return
-
-    try {
-      const { error } = await supabase
-        .from('chat_historico')
-        .insert({
-          psicologo_id: psicologo.id,
-          mensagem: message,
-          resposta: response,
-          tipo: 'assistente_ia'
-        })
-
-      if (error) throw error
-      loadChatHistory()
-    } catch (error) {
-      console.error('Erro ao salvar mensagem:', error)
-    }
-  }
-
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() || aiLoading) return
-
-    const userMessage = inputMessage.trim()
-    setInputMessage('')
-
-    try {
-      if (chatMode === 'patient' && selectedPaciente) {
-        // Modo conversa com paciente
-        addMessage({ role: 'user', content: userMessage })
-        
-        // Enviar mensagem via WhatsApp
-        await sendWhatsAppMessage(selectedPaciente.telefone, userMessage)
-        
-        // Adicionar confirmação de envio
-        addMessage({
-          role: 'assistant',
-          content: `Mensagem enviada para ${selectedPaciente.nome} via WhatsApp: "${userMessage}"`
-        })
-        
-        toast.success('Mensagem enviada via WhatsApp')
+  // Callbacks para WebSocket
+  const handleNewMessage = useCallback((data: any) => {
+    console.log('🔥 [DEBUG] handleNewMessage chamado:', data);
+    const { mensagem, conversa } = data.data;
+    
+    // Atualizar lista de conversas
+    setConversas(prev => {
+      const index = prev.findIndex(c => c.id === conversa.id);
+      if (index >= 0) {
+        const updated = [...prev];
+        updated[index] = { ...conversa, ultima_mensagem: mensagem.conteudo };
+        return updated.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       } else {
-        // Modo conversa com IA (comportamento original)
-        addMessage({ role: 'user', content: userMessage })
+        return [{ ...conversa, ultima_mensagem: mensagem.conteudo }, ...prev];
+      }
+    });
 
-        // Processar mensagem com IA
-        const response = await processMessage(userMessage)
-        
-        // Analisar sentimento da mensagem do usuário
-        const sentiment = await analyzeSentiment(userMessage)
-        setSentimentAnalysis(sentiment)
+    // Se a conversa está selecionada, adicionar mensagem
+    if (conversaSelecionada?.id === conversa.id) {
+      setMensagens(prev => [...prev, mensagem]);
+      
+      // Marcar como lida se for mensagem recebida
+      if (mensagem.tipo === 'recebida') {
+        markAsRead(conversa.id);
+      }
+    }
+  }, [conversaSelecionada]);
 
-        // Salvar no histórico se não for um chat existente
-        if (!selectedChat && psicologo?.id && response) {
-          await saveChatMessage(userMessage, response)
+  const handleMessageStatusUpdate = useCallback((data: any) => {
+    // Atualizar status das mensagens
+    setMensagens(prev => 
+      prev.map(msg => 
+        data.data.messageId.includes(msg.id) 
+          ? { ...msg, status: data.data.status }
+          : msg
+      )
+    );
+  }, []);
+
+  const handleWhatsAppStatusChange = useCallback((data: any) => {
+    const { state, instance } = data.data;
+    
+    if (state === 'open') {
+      toast.success(`WhatsApp conectado (${instance})`);
+    } else if (state === 'close') {
+      toast.warning(`WhatsApp desconectado (${instance})`);
+    }
+  }, []);
+
+  const handleUserTyping = useCallback((data: { userId: string; typing: boolean; conversaId: string }) => {
+    if (data.conversaId === conversaSelecionada?.id) {
+      setUsuariosDigitando(prev => {
+        const newSet = new Set(prev);
+        if (data.typing) {
+          newSet.add(data.userId);
+        } else {
+          newSet.delete(data.userId);
         }
+        return newSet;
+      });
+    }
+  }, [conversaSelecionada]);
+
+  // Configurar WebSocket
+  const { 
+    isConnected, 
+    connectionError, 
+    joinConversation, 
+    leaveConversation, 
+    startTyping, 
+    stopTyping, 
+    markAsRead 
+  } = useWebSocket({
+    onNewMessage: handleNewMessage,
+    onMessageStatusUpdate: handleMessageStatusUpdate,
+    onWhatsAppStatusChange: handleWhatsAppStatusChange,
+    onUserTyping: handleUserTyping
+  });
+
+  // Scroll para o final das mensagens
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Carregar conversas
+  useEffect(() => {
+    console.log('🚀 [DEBUG] useEffect carregarConversas executado');
+    carregarConversas();
+    carregarEstatisticas();
+  }, []);
+
+  // Auto-selecionar primeira conversa para teste
+  useEffect(() => {
+    if (conversas.length > 0 && !conversaSelecionada) {
+      console.log('🔄 [DEBUG] Auto-selecionando primeira conversa para teste:', conversas[0].paciente?.nome);
+      const primeiraConversa = conversas[0];
+      setConversaSelecionada(primeiraConversa);
+      joinConversation(primeiraConversa.paciente.id);
+      carregarMensagens(primeiraConversa.paciente.id);
+    }
+  }, [conversas, conversaSelecionada]);
+
+  // Carregar mensagens quando conversa é selecionada
+  useEffect(() => {
+    if (conversaSelecionada) {
+      carregarMensagens(conversaSelecionada?.paciente.id || '');
+    }
+  }, [conversaSelecionada]);
+
+  const carregarConversas = async () => {
+    console.log('💬 [DEBUG] Iniciando carregarConversas...');
+    try {
+      const { token, user: currentUser } = useAuthStore.getState();
+      console.log('💬 [DEBUG] Token disponível:', !!token);
+      console.log('💬 [DEBUG] Usuário atual:', currentUser);
+      
+      if (!token) {
+        console.error('🔐 [DEBUG] Token não encontrado para conversas');
+        return;
+      }
+      
+      console.log('💬 [DEBUG] Carregando conversas para usuário:', currentUser?.id, currentUser?.email);
+      console.log('💬 [DEBUG] Fazendo fetch para: /api/chat/conversas');
+      
+      const response = await fetch('/api/chat/conversas', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+      });
+
+      console.log('💬 [DEBUG] Response status conversas:', response.status);
+      console.log('💬 [DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('💬 [DEBUG] Conversas carregadas:', data.conversas?.length || 0);
+        console.log('💬 [DEBUG] Dados completos:', data);
+        setConversas(data.conversas || []);
+      } else {
+        const errorData = await response.text();
+        console.error('❌ [DEBUG] Erro ao carregar conversas:', response.status, errorData);
       }
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error)
-      toast.error('Erro ao enviar mensagem')
+      console.error('💥 [DEBUG] Erro ao carregar conversas:', error);
+    } finally {
+      console.log('💬 [DEBUG] Finalizando carregarConversas, setLoading(false)');
+      setLoading(false);
     }
-  }
+  };
 
-  const simulateAIResponse = async (message: string): Promise<string> => {
-    // Simular delay da API
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Respostas simuladas baseadas em palavras-chave
-    const lowerMessage = message.toLowerCase()
-
-    if (lowerMessage.includes('ansiedade') || lowerMessage.includes('ansioso')) {
-      return 'A ansiedade é uma resposta natural do corpo, mas quando excessiva pode impactar significativamente a qualidade de vida. Algumas técnicas que podem ajudar incluem:\n\n• Respiração diafragmática\n• Mindfulness e meditação\n• Exercícios físicos regulares\n• Identificação e questionamento de pensamentos ansiosos\n\nRecomendo explorar essas técnicas com o paciente e considerar uma avaliação mais detalhada se os sintomas persistirem.'
-    }
-
-    if (lowerMessage.includes('depressão') || lowerMessage.includes('deprimido')) {
-      return 'A depressão é um transtorno sério que requer atenção profissional. Alguns pontos importantes a considerar:\n\n• Avaliação de risco de autolesão\n• Histórico familiar e pessoal\n• Fatores desencadeantes\n• Rede de apoio social\n• Possível necessidade de encaminhamento psiquiátrico\n\nA terapia cognitivo-comportamental tem mostrado eficácia no tratamento da depressão, especialmente quando combinada com outras intervenções quando necessário.'
-    }
-
-    if (lowerMessage.includes('terapia') || lowerMessage.includes('sessão')) {
-      return 'Para uma sessão terapêutica eficaz, considere:\n\n• Estabelecer rapport e ambiente seguro\n• Definir objetivos claros para a sessão\n• Usar técnicas apropriadas para o caso\n• Fazer anotações relevantes no prontuário\n• Planejar homework terapêutico se apropriado\n• Agendar próxima sessão\n\nLembre-se de sempre documentar adequadamente o progresso do paciente.'
-    }
-
-    if (lowerMessage.includes('técnica') || lowerMessage.includes('intervenção')) {
-      return 'Algumas técnicas terapêuticas eficazes incluem:\n\n**Cognitivo-Comportamental:**\n• Reestruturação cognitiva\n• Exposição gradual\n• Registro de pensamentos\n\n**Humanística:**\n• Escuta ativa\n• Reflexão de sentimentos\n• Aceitação incondicional\n\n**Sistêmica:**\n• Genograma\n• Técnicas de comunicação\n• Intervenções familiares\n\nA escolha da técnica deve sempre considerar o perfil do paciente e o contexto terapêutico.'
-    }
-
-    // Resposta padrão
-    return 'Entendo sua questão. Como assistente de IA para psicólogos, posso ajudar com:\n\n• Sugestões de técnicas terapêuticas\n• Orientações sobre documentação\n• Informações sobre transtornos mentais\n• Dicas para manejo de casos\n• Recursos para desenvolvimento profissional\n\nPoderia ser mais específico sobre o que gostaria de saber? Lembre-se de que minhas sugestões não substituem sua expertise clínica.'
-  }
-
-  const startNewChat = () => {
-    clearMessages();
-    setSelectedChat(null);
-    setSentimentAnalysis(null);
-    setChatMode('ai');
-    setSelectedPaciente(null);
-  }
-
-  const startNewAIChat = () => {
-    startNewChat();
-    setChatMode('ai');
-    setShowNewChatDropdown(false);
-  }
-
-  const startNewPatientChat = () => {
-    setShowPacienteModal(true);
-    setShowNewChatDropdown(false);
-  }
-
-  const handleSelectPaciente = async (paciente: Paciente) => {
+  const carregarMensagens = async (pacienteId: string) => {
     try {
-      // Limpar chat atual
-      clearMessages();
-      setSelectedChat(null);
-      setSentimentAnalysis(null);
+      const { token } = useAuthStore.getState();
+      if (!token) {
+        console.error('🔐 [DEBUG] Token não encontrado');
+        return;
+      }
       
-      // Configurar modo paciente
-      setChatMode('patient');
-      setSelectedPaciente(paciente);
+      console.log('📨 [DEBUG] Carregando mensagens para paciente:', pacienteId);
       
-      // Enviar mensagem inicial via WhatsApp
-      const initialMessage = `Olá ${paciente.nome}! Sou ${psicologo?.nome}, seu psicólogo. Como você está se sentindo hoje?`;
+      const response = await fetch(`/api/chat/conversas/${pacienteId}/mensagens`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+      });
+
+      console.log('📨 [DEBUG] Response status:', response.status);
       
-      // Adicionar mensagem ao chat local
-      addMessage({
-        role: 'assistant',
-        content: `Mensagem enviada para ${paciente.nome} via WhatsApp: "${initialMessage}"`
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📨 [DEBUG] Mensagens carregadas:', data.mensagens?.length || 0);
+        setMensagens(data.mensagens || []);
+      } else {
+        const errorData = await response.text();
+        console.error('❌ [DEBUG] Erro ao carregar mensagens:', response.status, errorData);
+      }
+    } catch (error) {
+      console.error('💥 [DEBUG] Erro ao carregar mensagens:', error);
+    }
+  };
+
+  const carregarEstatisticas = async () => {
+    try {
+      const { token } = useAuthStore.getState();
+      if (!token) {
+        console.error('Token não encontrado');
+        return;
+      }
+      
+      const response = await fetch('/api/chat/estatisticas', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error);
+    }
+  };
+
+  const enviarMensagem = async () => {
+    if (!novaMensagem.trim() || !conversaSelecionada || enviandoMensagem) return;
+
+    setEnviandoMensagem(true);
+    
+    // Parar indicador de digitação
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    stopTyping(conversaSelecionada?.paciente.id || '', conversaSelecionada?.paciente.id || '');
+    
+    try {
+      const { token } = useAuthStore.getState();
+      if (!token) {
+        console.error('Token não encontrado');
+        return;
+      }
+      
+      const response = await fetch('/api/chat/mensagens', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          pacienteId: conversaSelecionada?.paciente.id,
+          conteudo: novaMensagem,
+          tipo: 'texto'
+        })
+      });
+
+      if (response.ok) {
+        setNovaMensagem('');
+        // Recarregar mensagens para mostrar a nova mensagem
+        await carregarMensagens(conversaSelecionada?.paciente.id || '');
+        // Atualizar lista de conversas
+        await carregarConversas();
+      } else {
+        console.error('Erro ao enviar mensagem');
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+    } finally {
+      setEnviandoMensagem(false);
+    }
+  };
+
+  // Manipular digitação
+  const handleTyping = (value: string) => {
+    setNovaMensagem(value);
+    
+    if (!conversaSelecionada) return;
+    
+    // Iniciar indicador de digitação
+    startTyping(conversaSelecionada?.paciente.id || '', conversaSelecionada?.paciente.id || '');
+    
+    // Parar indicador após 3 segundos de inatividade
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      stopTyping(conversaSelecionada?.paciente.id || '', conversaSelecionada?.paciente.id || '');
+    }, 3000);
+  };
+
+  const marcarComoLida = async (conversaId: string) => {
+    try {
+      const { token } = useAuthStore.getState();
+      if (!token) {
+        console.error('Token não encontrado');
+        return;
+      }
+      
+      const response = await fetch(`/api/chat/conversas/${conversaId}/marcar-lida`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      // Enviar via WhatsApp
-      await sendWhatsAppMessage(paciente.telefone, initialMessage);
-      
-      toast.success(`Conversa iniciada com ${paciente.nome}`);
+      if (response.ok) {
+        // Atualizar contador de não lidas
+        setConversas(prev => 
+          prev.map(c => 
+            c.id === conversaId 
+              ? { ...c, mensagens_nao_lidas: 0 }
+              : c
+          )
+        );
+        
+        // Notificar via WebSocket
+        markAsRead(conversaId);
+      }
     } catch (error) {
-      console.error('Erro ao iniciar conversa com paciente:', error);
-      toast.error('Erro ao iniciar conversa com paciente');
+      console.error('Erro ao marcar como lida:', error);
     }
-  }
+  };
 
-  const loadChat = (chat: ChatHistorico) => {
-    setSelectedChat(chat.id);
-    clearMessages();
-    
-    // Adicionar mensagens do histórico
-    addMessage({
-      content: chat.mensagem,
-      role: 'user',
-    });
-    
-    addMessage({
-      content: chat.resposta,
-      role: 'assistant',
-    });
-    
-    setSentimentAnalysis(null);
-  }
+  const conversasFiltradas = conversas.filter(conversa =>
+    conversa.paciente?.nome?.toLowerCase().includes(busca.toLowerCase()) ||
+    conversa.paciente?.telefone?.includes(busca)
+  );
 
-  const suggestions = [
-    'Como lidar com pacientes com ansiedade?',
-    'Técnicas para primeira sessão',
-    'Documentação de prontuários',
-    'Manejo de crises emocionais'
-  ]
+  const conversaAtual = conversaSelecionada;
+
+  const formatarHora = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'lida':
+        return <CheckCheck className="w-4 h-4 text-blue-500" />;
+      case 'entregue':
+        return <Check className="w-4 h-4 text-gray-500" />;
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex">
-      {/* Sidebar com histórico */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar - Lista de Conversas */}
+      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+        {/* Header */}
         <div className="p-4 border-b border-gray-200">
-          {/* Nova Conversa Button with Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNewChatDropdown(!showNewChatDropdown)}
-              className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <MessageSquare className="h-5 w-5 mr-2" />
-              Nova Conversa
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </button>
-            
-            {showNewChatDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                <button
-                  onClick={startNewAIChat}
-                  className="w-full flex items-center px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100"
-                >
-                  <Brain className="h-4 w-4 mr-3 text-blue-600" />
-                  <div>
-                    <div className="font-medium text-gray-900">Nova Conversa com IA</div>
-                    <div className="text-sm text-gray-500">Conversar com o assistente psicológico</div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <h1 className="text-xl font-semibold text-gray-900 flex items-center">
+                <MessageCircle className="w-6 h-6 mr-2 text-blue-600" />
+                Chat WhatsApp
+              </h1>
+              <div className="flex items-center space-x-2">
+                {isConnected ? (
+                  <div className="flex items-center text-green-600">
+                    <Wifi className="h-4 w-4 mr-1" />
+                    <span className="text-sm">Online</span>
                   </div>
-                </button>
-                <button
-                  onClick={startNewPatientChat}
-                  className="w-full flex items-center px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-                >
-                  <Users className="h-4 w-4 mr-3 text-green-600" />
-                  <div>
-                    <div className="font-medium text-gray-900">Conversa com Paciente</div>
-                    <div className="text-sm text-gray-500">Iniciar conversa via WhatsApp</div>
+                ) : (
+                  <div className="flex items-center text-red-600">
+                    <WifiOff className="h-4 w-4 mr-1" />
+                    <span className="text-sm">Offline</span>
                   </div>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          <h3 className="text-sm font-medium text-gray-900 mb-3">Histórico de Conversas</h3>
-          <div className="space-y-2">
-            {chatHistory.map((chat) => (
-              <button
-                key={chat.id}
-                onClick={() => loadChat(chat)}
-                className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                  selectedChat === chat.id
-                    ? 'bg-blue-50 border-blue-200'
-                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                }`}
-              >
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {chat.mensagem.substring(0, 50)}...
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {formatDate(chat.created_at)}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Status das Integrações */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="space-y-3">
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Status das Integrações</h4>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center text-gray-600">
-                  <Brain className="h-4 w-4 mr-2" />
-                  <span>Gemini AI</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${status.gemini ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className={`text-xs ${status.gemini ? 'text-green-600' : 'text-red-600'}`}>
-                    {status.gemini ? 'Conectado' : 'Desconectado'}
+                )}
+                {connectionError && (
+                  <span className="text-xs text-red-500" title={connectionError}>
+                    Erro de conexão
                   </span>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center text-gray-600">
-                  <Phone className="h-4 w-4 mr-2" />
-                  <span>WhatsApp</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${status.whatsapp ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className={`text-xs ${status.whatsapp ? 'text-green-600' : 'text-red-600'}`}>
-                    {status.whatsapp ? 'Conectado' : 'Desconectado'}
-                  </span>
-                </div>
+                )}
               </div>
             </div>
+            <button
+              onClick={() => window.location.href = '/chat/configuracao'}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+              title="Configurações do WhatsApp"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
 
-            {/* Análise de Sentimentos */}
-            {sentimentAnalysis && (
-              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                <h5 className="text-xs font-medium text-gray-700 mb-2">Análise Emocional</h5>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Estado:</span>
-                    <span className="font-medium">{sentimentAnalysis.emotionalState}</span>
+          {/* Estatísticas */}
+          {stats && (
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="bg-blue-50 p-2 rounded-lg">
+                <div className="text-xs text-blue-600">Conversas</div>
+                <div className="text-lg font-semibold text-blue-700">{stats.total_conversas}</div>
+              </div>
+              <div className="bg-green-50 p-2 rounded-lg">
+                <div className="text-xs text-green-600">Não lidas</div>
+                <div className="text-lg font-semibold text-green-700">{stats.mensagens_nao_lidas}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Busca */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Buscar conversas..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Lista de Conversas */}
+        <div className="flex-1 overflow-y-auto">
+          {conversasFiltradas.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              {busca ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
+            </div>
+          ) : (
+            conversasFiltradas.map((conversa) => (
+              <div
+                key={conversa.id}
+                onClick={async () => {
+                  console.log('🔄 [DEBUG] Selecionando conversa:', conversa.paciente?.nome, 'ID:', conversa.paciente?.id);
+                  
+                  // Sair da conversa anterior
+                  if (conversaSelecionada) {
+                    leaveConversation(conversaSelecionada.paciente.id);
+                  }
+                  
+                  setConversaSelecionada(conversa);
+                  if (conversa.mensagens_nao_lidas > 0) {
+                    marcarComoLida(conversa.id);
+                  }
+                  
+                  // Entrar na nova conversa via WebSocket
+                  joinConversation(conversa.paciente.id);
+                  
+                  // Carregar mensagens da conversa
+                  console.log('📨 [DEBUG] Iniciando carregamento de mensagens para:', conversa.paciente.id);
+                  await carregarMensagens(conversa.paciente.id);
+                }}
+                className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
+                  conversaSelecionada?.paciente?.id === conversa.paciente?.id ? 'bg-blue-50 border-blue-200' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 truncate">
+                        {conversa.paciente?.nome}
+                      </h3>
+                      {conversa.ultima_mensagem && (
+                        <span className="text-xs text-gray-500">
+                          {formatDistanceToNow(new Date(conversa.ultima_mensagem), {
+                            addSuffix: true,
+                            locale: ptBR
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center mt-1">
+                      <Phone className="w-3 h-3 text-gray-400 mr-1" />
+                      <span className="text-xs text-gray-500">{conversa.paciente?.telefone}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 truncate mt-1">
+                      {conversa.preview_mensagem || 'Sem mensagens'}
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Risco:</span>
-                    <span className={`font-medium ${
-                      sentimentAnalysis.riskLevel === 'high' ? 'text-red-600' :
-                      sentimentAnalysis.riskLevel === 'medium' ? 'text-yellow-600' : 'text-green-600'
-                    }`}>
-                      {sentimentAnalysis.riskLevel === 'high' ? 'Alto' :
-                       sentimentAnalysis.riskLevel === 'medium' ? 'Médio' : 'Baixo'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Confiança:</span>
-                    <span className="font-medium">{Math.round(sentimentAnalysis.confidence * 100)}%</span>
-                  </div>
+                  {conversa.mensagens_nao_lidas > 0 && (
+                    <div className="ml-2 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {conversa.mensagens_nao_lidas}
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Área principal do chat */}
+      {/* Área de Chat */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {chatMode === 'patient' && selectedPaciente ? (
-                <>
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                    <Users className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      Conversa com {selectedPaciente.nome}
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      WhatsApp: {selectedPaciente.telefone} • Via Evolution API
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                    <Bot className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Assistente IA</h2>
-                    <p className="text-sm text-gray-500">Seu assistente para prática clínica</p>
-                  </div>
-                </>
-              )}
+        {conversaSelecionada && conversaAtual ? (
+          <>
+            {/* Header do Chat */}
+            <div className="p-4 bg-white border-b border-gray-200">
+              <div className="flex items-center">
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                  {conversaAtual.paciente?.nome?.charAt(0).toUpperCase()}
+                </div>
+                <div className="ml-3">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {conversaAtual.paciente?.nome}
+                  </h2>
+                  <p className="text-sm text-gray-500">{conversaAtual.paciente?.telefone}</p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center space-x-2">
-              {chatMode === 'patient' && selectedPaciente && (
-                <button
-                  onClick={startNewChat}
-                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-                >
-                  Voltar para IA
-                </button>
-              )}
-              <button 
-                onClick={() => setShowSettings(true)}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Settings className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* Mensagens */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {aiMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <Bot className="h-8 w-8 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Olá! Sou seu assistente de IA
-              </h3>
-              <p className="text-gray-500 mb-6 max-w-md">
-                Posso ajudar com técnicas terapêuticas, documentação, orientações clínicas e muito mais.
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-                {suggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setInputMessage(suggestion)}
-                    className="p-3 text-left bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
-                  >
-                    <div className="flex items-center">
-                      <Zap className="h-4 w-4 text-blue-600 mr-2" />
-                      <span className="text-sm text-gray-700">{suggestion}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              {aiMessages.map((message) => (
+            {/* Mensagens */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {mensagens.map((mensagem) => (
                 <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  key={mensagem.id}
+                  className={`flex ${mensagem.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`flex max-w-3xl ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`flex-shrink-0 ${message.role === 'user' ? 'ml-3' : 'mr-3'}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        message.role === 'user' 
-                          ? 'bg-blue-600' 
-                          : 'bg-gray-100'
-                      }`}>
-                        {message.role === 'user' ? (
-                          <User className="h-5 w-5 text-white" />
-                        ) : (
-                          <Bot className="h-5 w-5 text-gray-600" />
-                        )}
-                      </div>
-                    </div>
-                    <div className={`px-4 py-2 rounded-lg ${
-                      message.role === 'user'
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      mensagem.direcao === 'enviada'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-900'
+                        : 'bg-gray-200 text-gray-900'
+                    }`}
+                  >
+                    <p className="text-sm">{mensagem.conteudo}</p>
+                    <div className={`flex items-center justify-end mt-1 space-x-1 ${
+                      mensagem.direcao === 'enviada' ? 'text-blue-100' : 'text-gray-500'
                     }`}>
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                      
-                      {/* Indicadores de sentimentos */}
-                      {message.sentiment && message.role === 'assistant' && (
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <div className="flex items-center space-x-3 text-xs">
-                            <div className="flex items-center space-x-1">
-                              <Heart className="h-3 w-3" />
-                              <span>{message.sentiment.emotionalState}</span>
-                            </div>
-                            {message.sentiment.riskLevel === 'high' && (
-                              <div className="flex items-center space-x-1 text-red-600">
-                                <AlertTriangle className="h-3 w-3" />
-                                <span>Alto Risco</span>
-                              </div>
-                            )}
-                            <div className="flex items-center space-x-1">
-                              <TrendingUp className="h-3 w-3" />
-                              <span>{Math.round(message.sentiment.confidence * 100)}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Metadata da IA */}
-                      {message.metadata && message.role === 'assistant' && (
-                        <div className="mt-1 text-xs text-gray-400">
-                          <span>{message.metadata.model}</span>
-                          {message.metadata.responseTime && (
-                            <span> • {message.metadata.responseTime}ms</span>
-                          )}
-                        </div>
-                      )}
-                      
-                      <p className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
-                      }`}>
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
+                      <span className="text-xs">
+                        {formatarHora(mensagem.created_at)}
+                      </span>
+                      {mensagem.direcao === 'enviada' && getStatusIcon(mensagem.status_entrega)}
                     </div>
                   </div>
                 </div>
               ))}
-              {aiLoading && (
-                <div className="flex justify-start">
-                  <div className="flex mr-3">
-                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                      <Bot className="h-5 w-5 text-gray-600" />
+              
+              {/* Indicador de digitação */}
+              {usuariosDigitando.size > 0 && (
+                <div className="flex justify-start mb-4">
+                  <div className="bg-gray-100 rounded-lg px-4 py-2 max-w-xs">
+                    <div className="flex items-center space-x-1">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                      <span className="text-sm text-gray-500 ml-2">digitando...</span>
                     </div>
                   </div>
-                  <div className="bg-gray-100 px-4 py-2 rounded-lg">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                  </div>
                 </div>
               )}
-            </>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input */}
-        <div className="bg-white border-t border-gray-200 p-4">
-          <div className="flex space-x-3">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Digite sua pergunta..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={aiLoading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || aiLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send className="h-5 w-5" />
-            </button>
-          </div>
-          
-          {/* Status da IA */}
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center space-x-4 text-xs text-gray-500">
-              {status.gemini && (
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>IA Ativa</span>
-                </div>
-              )}
-              {status.whatsapp && (
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>WhatsApp Conectado</span>
-                </div>
-              )}
-              {!status.gemini && !status.whatsapp && (
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <span>Modo Simulação</span>
-                </div>
-              )}
+              
+              <div ref={messagesEndRef} />
             </div>
-            
-            <p className="text-xs text-gray-400">
-              {status.gemini ? 'IA Real Ativa' : 'Configure a IA nas configurações'}
-            </p>
+
+            {/* Input de Mensagem */}
+            <div className="p-4 bg-white border-t border-gray-200">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={novaMensagem}
+                  onChange={(e) => handleTyping(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && enviarMensagem()}
+                  placeholder="Digite sua mensagem..."
+                  disabled={enviandoMensagem}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                />
+                <button
+                  onClick={enviarMensagem}
+                  disabled={!novaMensagem.trim() || enviandoMensagem}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {enviandoMensagem ? 'Enviando...' : 'Enviar'}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Selecione uma conversa
+              </h3>
+              <p className="text-gray-500">
+                Escolha uma conversa da lista para começar a conversar
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Modal de Configurações */}
-      <ChatSettings 
-        isOpen={showSettings} 
-        onClose={() => setShowSettings(false)} 
-      />
-      
-      {/* Modal de Seleção de Paciente */}
-      <PacienteSelectionModal
-        isOpen={showPacienteModal}
-        onClose={() => setShowPacienteModal(false)}
-        onSelectPaciente={handleSelectPaciente}
-      />
+      {/* Modal de Configurações (placeholder) */}
+      {showConfig && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-lg font-semibold mb-4">Configurações do WhatsApp</h3>
+            <p className="text-gray-600 mb-4">
+              As configurações da Evolution API serão implementadas em breve.
+            </p>
+            <button
+              onClick={() => setShowConfig(false)}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  )
-}
+  );
+};
+
+export default Chat;

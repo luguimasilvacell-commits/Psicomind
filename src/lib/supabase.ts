@@ -7,41 +7,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Configurações otimizadas para melhor conectividade
+// Configuração simplificada para resolver problema de autenticação
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true
-  },
-  global: {
-    headers: {
-      'x-client-info': 'psicomind-web'
-    },
-    fetch: (url, options: RequestInit = {}) => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000)
-      
-      return fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          ...(options.headers || {}),
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      }).finally(() => {
-        clearTimeout(timeoutId)
-      })
-    }
-  },
-  db: {
-    schema: 'public'
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
   }
 })
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Save, DollarSign, Calendar, FileText, User, CreditCard } from 'lucide-react'
+import { X, Save, Calendar, FileText, User, CreditCard } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -157,7 +157,7 @@ export default function TransacaoForm({ transacao, pacientes, onClose, onSave }:
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] form-scrollbar">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
             {transacao ? 'Editar Transação' : 'Nova Transação'}
@@ -231,13 +231,14 @@ export default function TransacaoForm({ transacao, pacientes, onClose, onSave }:
             {/* Valor */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                <DollarSign className="h-4 w-4 inline mr-1" />
-                Valor *
+                R$ *
               </label>
               <input
                 type="text"
                 value={valorMask.displayValue}
                 onChange={(e) => valorMask.onChange(e.target.value)}
+                onBlur={valorMask.onBlur}
+                onFocus={valorMask.onFocus}
                 placeholder="R$ 0,00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
@@ -342,7 +343,9 @@ export default function TransacaoForm({ transacao, pacientes, onClose, onSave }:
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Selecione um paciente</option>
-                  {pacientes.map((paciente) => (
+                  {pacientes
+                    .sort((a, b) => a.nome.localeCompare(b.nome))
+                    .map((paciente) => (
                     <option key={paciente.id} value={paciente.id}>
                       {paciente.nome}
                     </option>

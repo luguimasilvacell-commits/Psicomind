@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Save, User, Calendar, Clock, DollarSign } from 'lucide-react'
+import { X, Save, User, Calendar, Clock } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -41,6 +41,8 @@ export default function AgendamentoForm({
 }: AgendamentoFormProps) {
   const { psicologo } = useAuthStore()
   const [loading, setLoading] = React.useState(false)
+  const [agendamentosAnteriores, setAgendamentosAnteriores] = React.useState<Agendamento[]>([])
+  const [loadingHistorico, setLoadingHistorico] = React.useState(false)
 
   const {
     register,
@@ -84,6 +86,81 @@ export default function AgendamentoForm({
   const watchedData = watch('data')
   const watchedHora = watch('hora')
   const watchedDuracao = watch('duracao_minutos')
+  const watchedPacienteId = watch('paciente_id')
+
+  // Buscar agendamentos anteriores do paciente
+  const buscarAgendamentosAnteriores = async (pacienteId: string) => {
+    if (!pacienteId || !psicologo?.id) return
+
+    setLoadingHistorico(true)
+    try {
+      console.log('🔍 Buscando agendamentos anteriores para paciente:', pacienteId)
+      
+      // Fazer query direta sem supabaseWithRetry para evitar problemas de parsing
+      const { data, error } = await supabase
+        .from('agendamentos')
+        .select(`
+          id,
+          data_hora,
+          duracao_minutos,
+          tipo,
+          status,
+          status_sessao,
+          observacoes,
+          valor,
+          paciente:pacientes(
+            id,
+            nome,
+            email,
+            telefone
+          )
+        `)
+        .eq('psicologo_id', psicologo.id)
+        .eq('paciente_id', pacienteId)
+        .neq('id', agendamento?.id || '') // Excluir o agendamento atual se estiver editando
+        .order('data_hora', { ascending: false })
+        .limit(10)
+
+      console.log('📊 Resultado da query agendamentos anteriores:', { data, error })
+
+      if (error) {
+        console.error('❌ Erro na query do Supabase:', error)
+        throw new Error(`Erro ao buscar agendamentos: ${error.message}`)
+      }
+
+      if (!data) {
+        console.warn('⚠️ Nenhum dado retornado da query')
+        setAgendamentosAnteriores([])
+        return
+      }
+
+      console.log('✅ Agendamentos anteriores carregados:', data.length)
+      setAgendamentosAnteriores(data)
+    } catch (error: any) {
+      console.error('💥 Erro ao buscar agendamentos anteriores:', error)
+      
+      // Verificar se o erro é de parsing JSON
+      if (error.message?.includes('Unexpected token') || error.message?.includes('<!doctype')) {
+        console.error('🚨 Erro de parsing JSON detectado - possível problema de autenticação ou endpoint')
+        toast.error('Erro de conexão. Verifique sua autenticação e tente novamente.')
+      } else {
+        toast.error(`Erro ao buscar agendamentos anteriores: ${error.message}`)
+      }
+      
+      setAgendamentosAnteriores([])
+    } finally {
+      setLoadingHistorico(false)
+    }
+  }
+
+  // Monitorar mudanças no paciente selecionado
+  React.useEffect(() => {
+    if (watchedPacienteId) {
+      buscarAgendamentosAnteriores(watchedPacienteId)
+    } else {
+      setAgendamentosAnteriores([])
+    }
+  }, [watchedPacienteId, psicologo?.id])
 
   // Verificar conflitos de horário
   const [conflitos, setConflitos] = React.useState<Agendamento[]>([])
@@ -214,7 +291,7 @@ export default function AgendamentoForm({
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] form-scrollbar scroll-indicator">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
             {agendamento ? 'Editar Agendamento' : 'Novo Agendamento'}
@@ -239,11 +316,13 @@ export default function AgendamentoForm({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Selecione um paciente</option>
-              {pacientes.map((paciente) => (
-                <option key={paciente.id} value={paciente.id}>
-                  {paciente.nome}
-                </option>
-              ))}
+              {pacientes
+                .sort((a, b) => a.nome.localeCompare(b.nome))
+                .map((paciente) => (
+                  <option key={paciente.id} value={paciente.id}>
+                    {paciente.nome}
+                  </option>
+                ))}
             </select>
             {errors.paciente_id && (
               <p className="mt-1 text-sm text-red-600">{errors.paciente_id.message}</p>
@@ -367,13 +446,14 @@ export default function AgendamentoForm({
           {/* Valor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              <DollarSign className="h-4 w-4 inline mr-1" />
-              Valor
+              R$
             </label>
             <input
               type="text"
               value={valorMask.displayValue}
               onChange={(e) => valorMask.onChange(e.target.value)}
+              onBlur={valorMask.onBlur}
+              onFocus={valorMask.onFocus}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="R$ 0,00"
             />
@@ -394,6 +474,92 @@ export default function AgendamentoForm({
               placeholder="Observações sobre o agendamento..."
             />
           </div>
+
+          {/* Histórico do Paciente */}
+          {watchedPacienteId && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
+                <User className="h-4 w-4 mr-2" />
+                Histórico do Paciente
+              </h4>
+              
+              {loadingHistorico ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Carregando histórico...</p>
+                </div>
+              ) : agendamentosAnteriores.length > 0 ? (
+                <div className="space-y-3 max-h-60 overflow-y-auto history-scrollbar">
+                  {agendamentosAnteriores.map((agendamentoAnterior) => (
+                    <div key={agendamentoAnterior.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-900">
+                            {new Date(agendamentoAnterior.data_hora).toLocaleDateString('pt-BR')}
+                          </span>
+                          <Clock className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-600">
+                            {new Date(agendamentoAnterior.data_hora).toLocaleTimeString('pt-BR', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            agendamentoAnterior.status === 'realizado' ? 'bg-green-100 text-green-800' :
+                            agendamentoAnterior.status === 'cancelado' ? 'bg-red-100 text-red-800' :
+                            agendamentoAnterior.status === 'faltou' ? 'bg-orange-100 text-orange-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {agendamentoAnterior.status}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">Tipo:</span>
+                          <span className="ml-1 text-gray-900 capitalize">{agendamentoAnterior.tipo}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Duração:</span>
+                          <span className="ml-1 text-gray-900">{agendamentoAnterior.duracao_minutos}min</span>
+                        </div>
+                      </div>
+                      
+                      {agendamentoAnterior.observacoes && (
+                        <div className="mt-2 text-sm">
+                          <span className="text-gray-500">Observações:</span>
+                          <p className="text-gray-700 mt-1 text-xs bg-gray-50 p-2 rounded">
+                            {agendamentoAnterior.observacoes.length > 100 
+                              ? `${agendamentoAnterior.observacoes.substring(0, 100)}...`
+                              : agendamentoAnterior.observacoes
+                            }
+                          </p>
+                        </div>
+                      )}
+                      
+                      {agendamentoAnterior.valor && (
+                        <div className="mt-2 text-sm">
+                          <span className="text-gray-500">Valor:</span>
+                          <span className="ml-1 text-gray-900 font-medium">
+                            R$ {agendamentoAnterior.valor.toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <User className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhum agendamento anterior encontrado</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Conflitos */}
           {conflitos.length > 0 && (

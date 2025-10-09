@@ -14,10 +14,9 @@ import { fileURLToPath } from 'url'
 import authRoutes from './routes/auth.js'
 import pacientesRoutes from './routes/pacientes.js'
 import auditRoutes from './routes/audit.js'
-import aiRoutes from './routes/ai.js'
-import webhookRoutes from './routes/webhook.js'
-import templateRoutes from './routes/templates.js'
 import logRoutes from './routes/logs.js'
+import chatRoutes from './routes/chat.js'
+import webhookRoutes from './routes/webhook.js'
 import { requestLoggerMiddleware } from './services/logService.js'
 import { 
   securityHeaders, 
@@ -84,10 +83,9 @@ app.use(auditLogger.middleware())
 app.use('/api/auth', authRoutes)
 app.use('/api/pacientes', pacientesRoutes)
 app.use('/api/audit', auditRoutes)
-app.use('/api/ai', aiRoutes)
-app.use('/api/webhook', webhookRoutes)
-app.use('/api/templates', templateRoutes)
 app.use('/api/logs', logRoutes)
+app.use('/api/chat', chatRoutes)
+app.use('/api/webhook', webhookRoutes)
 
 /**
  * health

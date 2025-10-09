@@ -33,8 +33,13 @@ export const useAgendamentoProntuario = (): UseAgendamentoProntuarioReturn => {
       throw new Error('Usuário não autenticado')
     }
 
-    // Verificar cache primeiro
-    const cached = statusCache.get(agendamentoId)
+    // Verificar cache primeiro usando uma função que acessa o estado atual
+    let cached: AgendamentoProntuarioStatus | undefined
+    setStatusCache(prev => {
+      cached = prev.get(agendamentoId)
+      return prev
+    })
+    
     if (cached && !cached.loading) {
       return cached
     }
@@ -91,7 +96,7 @@ export const useAgendamentoProntuario = (): UseAgendamentoProntuarioReturn => {
       
       return errorStatus
     }
-  }, [user, statusCache])
+  }, [user])
 
   // Função para navegar para o prontuário (existente ou criar novo)
   const navegarParaProntuario = useCallback(async (agendamento: Agendamento) => {
@@ -173,7 +178,42 @@ export const useAgendamentoProntuario = (): UseAgendamentoProntuarioReturn => {
 export const useProntuarioExists = (agendamentoId: string | null) => {
   const [exists, setExists] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
-  const { verificarProntuario } = useAgendamentoProntuario()
+  const { user } = useAuthStore()
+
+  const checkExists = useCallback(async (id: string) => {
+    if (!user) {
+      throw new Error('Usuário não autenticado')
+    }
+
+    setLoading(true)
+    try {
+      const result = await supabaseWithRetry(
+        async () => {
+          const response = await supabase
+            .from('prontuarios')
+            .select('id')
+            .eq('agendamento_id', id)
+            .eq('psicologo_id', user.id)
+            .single()
+          return response
+        },
+        {
+          maxRetries: 3,
+          showToast: false,
+          useCache: true,
+          cacheKey: `prontuario_exists_${id}`,
+          cacheTtl: 60000 // 1 minuto
+        }
+      )
+
+      setExists(!result.error && !!result.data)
+    } catch (error) {
+      console.error('Erro ao verificar prontuário:', error)
+      setExists(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   useEffect(() => {
     if (!agendamentoId) {
@@ -181,21 +221,8 @@ export const useProntuarioExists = (agendamentoId: string | null) => {
       return
     }
 
-    const checkExists = async () => {
-      setLoading(true)
-      try {
-        const status = await verificarProntuario(agendamentoId)
-        setExists(status.temProntuario)
-      } catch (error) {
-        console.error('Erro ao verificar prontuário:', error)
-        setExists(false)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkExists()
-  }, [agendamentoId, verificarProntuario])
+    checkExists(agendamentoId)
+  }, [agendamentoId, checkExists])
 
   return { exists, loading }
 }

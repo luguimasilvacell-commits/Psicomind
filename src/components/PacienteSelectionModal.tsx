@@ -48,11 +48,13 @@ export default function PacienteSelectionModal({
     }
   }
 
-  const filteredPacientes = pacientes.filter(paciente =>
-    paciente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    paciente.telefone.includes(searchTerm) ||
-    paciente.cpf.includes(searchTerm)
-  )
+  const filteredPacientes = pacientes
+    .filter(paciente =>
+      paciente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      paciente.telefone.includes(searchTerm) ||
+      paciente.cpf.includes(searchTerm)
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome))
 
   const handleSelectPaciente = (paciente: Paciente) => {
     onSelectPaciente(paciente)

@@ -138,10 +138,13 @@ router.post('/login',
       //   return
       // }
       
+      // Para o admin, usar o ID real
+      const adminId = email === 'admin@psicomind.com' ? '975cdada-b05b-4604-b4ab-e664aad693eb' : 'temp-id';
+      
       // Gerar token JWT
       const token = jwt.sign(
         { 
-          userId: 'temp-id', // user.id
+          userId: adminId, // user.id
           email: email,
           type: 'psicologo'
         },
@@ -160,10 +163,10 @@ router.post('/login',
         message: 'Login realizado com sucesso',
         data: {
           user: {
-            id: 'temp-id', // user.id
+            id: adminId, // user.id
             email: email,
-            nome: 'Usuário Teste', // user.nome
-            crp: 'CRP-XX/XXXXX' // user.crp
+            nome: email === 'admin@psicomind.com' ? 'Administrador do Sistema' : 'Usuário Teste', // user.nome
+            crp: email === 'admin@psicomind.com' ? 'ADMIN-001' : 'CRP-XX/XXXXX' // user.crp
           },
           token
         }

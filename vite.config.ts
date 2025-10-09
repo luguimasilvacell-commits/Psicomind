@@ -118,9 +118,9 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.log em produção
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        drop_console: process.env.NODE_ENV === 'production', // Remove console.log apenas em produção
+        drop_debugger: process.env.NODE_ENV === 'production',
+        pure_funcs: process.env.NODE_ENV === 'production' ? ['console.log', 'console.info', 'console.debug'] : [],
       },
       mangle: {
         safari10: true,

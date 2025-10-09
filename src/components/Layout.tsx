@@ -6,16 +6,13 @@ import {
   Calendar, 
   FileText, 
   DollarSign, 
-  MessageSquare, 
   BarChart3, 
   Settings,
   LogOut,
   Menu,
   X,
-  Brain,
-  History,
-  Layers,
-  ScrollText
+  ScrollText,
+  MessageCircle
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { cn } from '../lib/utils'
@@ -26,11 +23,8 @@ const navigation = [
   { name: 'Pacientes', href: '/pacientes', icon: Users },
   { name: 'Agendamentos', href: '/agendamentos', icon: Calendar },
   { name: 'Prontuários', href: '/prontuarios', icon: FileText },
+  { name: 'Chat WhatsApp', href: '/chat', icon: MessageCircle },
   { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
-  { name: 'Chat IA', href: '/chat-ia', icon: MessageSquare },
-  { name: 'Templates', href: '/templates', icon: Layers },
-  { name: 'Histórico Chat', href: '/chat-history', icon: History },
-  { name: 'Analytics IA', href: '/ai-analytics', icon: Brain },
   { name: 'Logs Sistema', href: '/system-logs', icon: ScrollText },
   { name: 'Relatórios', href: '/relatorios', icon: BarChart3 },
   { name: 'Configurações', href: '/configuracoes', icon: Settings },

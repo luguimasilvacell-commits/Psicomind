@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { 
   formatCPF, 
   formatPhone, 
@@ -99,89 +99,174 @@ export const useMaskedInput = ({ initialValue = '', maskType, onChange }: UseMas
     return getRawValue()
   }, [value, maskType, getRawValue])
 
+  const wrappedOnChange = useCallback((event: React.ChangeEvent<HTMLInputElement> | string) => {
+    try {
+      const newValue = typeof event === 'string' ? event : event.target.value
+      handleChange(newValue)
+    } catch (error) {
+      console.error('❌ Error in wrappedOnChange:', error)
+    }
+  }, [handleChange, maskType])
+
   return {
     value,
-    onChange: handleChange,
+    onChange: wrappedOnChange,
     getRawValue,
     getISOValue,
     setValue
   }
 }
 
-// Hook específico para campos de moeda
+// Hook específico para campos de moeda - Versão flexível
 export const useCurrencyInput = (initialValue: number = 0, onChange?: (value: number) => void) => {
   const [displayValue, setDisplayValue] = useState(formatCurrency(initialValue))
-  const [rawValue, setRawValue] = useState(initialValue.toString())
+  const [rawValue, setRawValue] = useState(initialValue)
+  const [isEditing, setIsEditing] = useState(false)
 
   const handleChange = useCallback((newValue: string) => {
-    // Remove tudo exceto números e vírgulas
-    let cleanValue = newValue.replace(/[^\d,]/g, '')
+    setIsEditing(true)
     
-    // Se o valor está vazio, define como 0
-    if (!cleanValue) {
-      setDisplayValue('R$ 0,00')
-      setRawValue('0')
+    // Se o campo está vazio, permite e define como 0
+    if (newValue === '' || newValue === 'R$ ') {
+      setDisplayValue('')
+      setRawValue(0)
       onChange?.(0)
       return
     }
     
-    // Permite apenas uma vírgula
-    const commaCount = (cleanValue.match(/,/g) || []).length
-    if (commaCount > 1) {
-      return // Não permite múltiplas vírgulas
-    }
+    // Remove apenas o prefixo R$ e espaços extras, mantém números, vírgulas e pontos
+    let workingValue = newValue.replace(/^R\$\s*/, '').trim()
     
-    // Se termina com vírgula, permite para continuar digitando os centavos
-    if (cleanValue.endsWith(',')) {
-      // Formata temporariamente sem os centavos
-      const integerPart = cleanValue.slice(0, -1)
-      if (integerPart) {
-        const tempValue = parseFloat(integerPart) || 0
-        setDisplayValue(`R$ ${tempValue.toLocaleString('pt-BR')},`)
-      } else {
-        setDisplayValue('R$ 0,')
-      }
-      setRawValue(cleanValue)
+    // Se ainda está vazio após remover R$, trata como 0
+    if (!workingValue) {
+      setDisplayValue('')
+      setRawValue(0)
+      onChange?.(0)
       return
     }
     
-    // Converte vírgula para ponto para parseFloat
-    const valueForParsing = cleanValue.replace(',', '.')
-    let numericValue = parseFloat(valueForParsing) || 0
+    // Remove caracteres não numéricos exceto vírgula e ponto
+    workingValue = workingValue.replace(/[^\d,.]/g, '')
     
-    // Se tem vírgula, trata como centavos
-    if (cleanValue.includes(',')) {
-      const parts = cleanValue.split(',')
-      if (parts[1] && parts[1].length <= 2) {
-        // Limita a 2 casas decimais
-        const integerPart = parseFloat(parts[0]) || 0
-        const decimalPart = parts[1].padEnd(2, '0').slice(0, 2)
-        numericValue = parseFloat(`${integerPart}.${decimalPart}`)
+    // Se não há números, trata como 0
+    if (!/\d/.test(workingValue)) {
+      setDisplayValue('')
+      setRawValue(0)
+      onChange?.(0)
+      return
+    }
+    
+    // Normaliza separadores: substitui pontos por vírgulas (exceto se for separador de milhares)
+    // Permite apenas uma vírgula como separador decimal
+    const commaCount = (workingValue.match(/,/g) || []).length
+    if (commaCount > 1) {
+      // Remove vírgulas extras, mantendo apenas a última como separador decimal
+      const lastCommaIndex = workingValue.lastIndexOf(',')
+      workingValue = workingValue.substring(0, lastCommaIndex).replace(/,/g, '') + workingValue.substring(lastCommaIndex)
+    }
+    
+    // Se tem ponto e vírgula, remove pontos (assumindo que vírgula é decimal)
+    if (workingValue.includes(',') && workingValue.includes('.')) {
+      workingValue = workingValue.replace(/\./g, '')
+    }
+    
+    // Se tem apenas pontos, converte o último para vírgula (separador decimal)
+    if (workingValue.includes('.') && !workingValue.includes(',')) {
+      const dotCount = (workingValue.match(/\./g) || []).length
+      if (dotCount === 1) {
+        workingValue = workingValue.replace('.', ',')
+      } else {
+        // Múltiplos pontos: mantém apenas o último como separador decimal
+        const lastDotIndex = workingValue.lastIndexOf('.')
+        workingValue = workingValue.substring(0, lastDotIndex).replace(/\./g, '') + ',' + workingValue.substring(lastDotIndex + 1)
       }
     }
     
-    // Formata para exibição
-    const formatted = formatCurrency(numericValue)
-    setDisplayValue(formatted)
-    setRawValue(numericValue.toString())
+    // Processa o valor numérico
+    let numericValue = 0
     
-    // Chama callback com valor numérico
+    if (workingValue.includes(',')) {
+      const parts = workingValue.split(',')
+      const integerPart = parts[0].replace(/\D/g, '') // Remove não-dígitos da parte inteira
+      let decimalPart = parts[1] || ''
+      
+      // Limita a 2 casas decimais
+      if (decimalPart.length > 2) {
+        decimalPart = decimalPart.substring(0, 2)
+      }
+      
+      // Constrói o número
+      const integerValue = parseInt(integerPart) || 0
+      const decimalValue = decimalPart ? parseInt(decimalPart.padEnd(2, '0')) / 100 : 0
+      numericValue = integerValue + decimalValue
+    } else {
+      // Apenas números inteiros
+      const cleanNumber = workingValue.replace(/\D/g, '')
+      numericValue = parseInt(cleanNumber) || 0
+    }
+    
+    // Durante a edição, mostra o valor mais próximo do que o usuário digitou
+    if (isEditing) {
+      // Se termina com vírgula, mantém a vírgula para continuar digitando
+      if (workingValue.endsWith(',')) {
+        const integerPart = workingValue.split(',')[0].replace(/\D/g, '')
+        const formattedInteger = parseInt(integerPart) || 0
+        setDisplayValue(`R$ ${formattedInteger.toLocaleString('pt-BR')},`)
+      } else if (workingValue.includes(',')) {
+        // Tem parte decimal
+        const parts = workingValue.split(',')
+        const integerPart = parts[0].replace(/\D/g, '')
+        let decimalPart = parts[1] || ''
+        
+        if (decimalPart.length > 2) {
+          decimalPart = decimalPart.substring(0, 2)
+        }
+        
+        const formattedInteger = parseInt(integerPart) || 0
+        setDisplayValue(`R$ ${formattedInteger.toLocaleString('pt-BR')},${decimalPart}`)
+      } else {
+        // Apenas inteiros
+        setDisplayValue(`R$ ${numericValue.toLocaleString('pt-BR')}`)
+      }
+    } else {
+      // Quando não está editando, formata completamente
+      setDisplayValue(formatCurrency(numericValue))
+    }
+    
+    setRawValue(numericValue)
     onChange?.(numericValue)
-  }, [onChange])
+  }, [onChange, isEditing])
+
+  const handleBlur = useCallback(() => {
+    setIsEditing(false)
+    // Ao sair do campo, formata completamente
+    if (rawValue === 0 && displayValue === '') {
+      setDisplayValue('R$ 0,00')
+    } else {
+      setDisplayValue(formatCurrency(rawValue))
+    }
+  }, [rawValue, displayValue])
+
+  const handleFocus = useCallback(() => {
+    setIsEditing(true)
+  }, [])
 
   const setValue = useCallback((value: number) => {
     const formatted = formatCurrency(value)
     setDisplayValue(formatted)
-    setRawValue(value.toString())
+    setRawValue(value)
+    setIsEditing(false)
   }, [])
 
   const getValue = useCallback(() => {
-    return parseFloat(rawValue) || 0
+    return rawValue
   }, [rawValue])
 
   return {
     displayValue,
     onChange: handleChange,
+    onBlur: handleBlur,
+    onFocus: handleFocus,
     setValue,
     getValue
   }

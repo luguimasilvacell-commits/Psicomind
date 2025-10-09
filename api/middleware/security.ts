@@ -125,6 +125,12 @@ export const validateUserAgent = (
   res: Response,
   next: NextFunction
 ): void => {
+  // Permitir webhooks sem validação de User-Agent
+  if (req.path.startsWith('/api/webhook')) {
+    next()
+    return
+  }
+  
   const userAgent = req.get('User-Agent')
   
   if (!userAgent || userAgent.length < 10 || userAgent.length > 500) {

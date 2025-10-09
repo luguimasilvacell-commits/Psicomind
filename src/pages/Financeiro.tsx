@@ -1,6 +1,6 @@
 import React from 'react'
 import { DollarSign, Plus, Search, Filter, Edit, Trash2, TrendingUp, TrendingDown, Calendar, CreditCard } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { supabase, type TransacaoFinanceira, type Paciente } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency, formatDate, formatDateTime } from '../lib/utils'
@@ -285,21 +285,38 @@ export default function Financeiro() {
         {/* Status Distribution */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Distribuição por Status</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={350}>
             <PieChart>
               <Pie
                 data={statusData}
                 cx="50%"
                 cy="50%"
-                outerRadius={80}
+                outerRadius={110}
+                innerRadius={40}
                 dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
               >
                 {statusData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip 
+                formatter={(value, name) => [value, name]}
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}
+              />
+              <Legend 
+                verticalAlign="bottom"
+                height={36}
+                formatter={(value, entry) => `${value}: ${entry.payload.value}`}
+                wrapperStyle={{
+                  paddingTop: '20px',
+                  fontSize: '14px'
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

@@ -1,3 +1,7 @@
+-- DADOS DE TESTE REMOVIDOS - Migration 20250109_clean_test_data.sql
+-- Para reativar dados de teste, descomente as linhas abaixo
+
+/*
 -- Inserir pacientes de teste para o psicólogo existente
 INSERT INTO pacientes (nome, cpf, email, telefone, data_nascimento, endereco, psicologo_id)
 SELECT 
@@ -37,3 +41,4 @@ SELECT
 FROM psicologos p 
 WHERE p.email = 'teste@psicomind.com'
 ON CONFLICT (cpf) DO NOTHING;
+*/
