@@ -4,9 +4,11 @@
 
 // Tipos básicos
 export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video';
-export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
-export type SenderType = 'patient' | 'psychologist';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+export type SenderType = 'patient' | 'psychologist' | 'automation';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'qr' | 'connected' | 'error';
+export type AutomationType = 'keyword' | 'webhook' | 'scheduled';
+export type AutomationStatus = 'active' | 'inactive' | 'paused';
 
 // Interface para Paciente (simplificada para o chat)
 export interface ChatPatient {
@@ -124,6 +126,7 @@ export interface MessageAreaProps {
   onMarkAsRead: () => void;
   loading?: boolean;
   typing?: boolean;
+  getWebhookStatus?: (messageId: string) => WebhookStatus | null;
 }
 
 export interface MessageBubbleProps {
@@ -179,6 +182,16 @@ export interface UseChatReturn {
   markAsRead: () => Promise<void>;
   refreshConversations: () => Promise<void>;
   refreshMessages: () => Promise<void>;
+  getWebhookStatus: (messageId: string) => WebhookStatus | null;
+  testWebhook: () => Promise<boolean>;
+}
+
+// Webhook status interface
+export interface WebhookStatus {
+  status: 'pending' | 'success' | 'error';
+  timestamp: string;
+  error?: string;
+  response?: any;
 }
 
 export interface UseWhatsAppReturn {
@@ -335,3 +348,189 @@ export const DEFAULT_TEMPLATE_CATEGORIES = [
 ] as const;
 
 export type TemplateCategory = typeof DEFAULT_TEMPLATE_CATEGORIES[number];
+
+// Novas interfaces para integração n8n e Evolution API
+
+// Interface para Automação
+export interface Automation {
+  id: string;
+  psychologist_id: string;
+  name: string;
+  description?: string;
+  type: AutomationType;
+  status: AutomationStatus;
+  trigger_config: {
+    keywords?: string[];
+    webhook_url?: string;
+    schedule?: string;
+    conditions?: any;
+  };
+  action_config: {
+    n8n_workflow_id?: string;
+    response_message?: string;
+    forward_to_n8n?: boolean;
+    variables?: Record<string, any>;
+  };
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para Mensagem de Automação
+export interface AutomationMessage {
+  id: string;
+  automation_id: string;
+  conversation_id: string;
+  message_id: string;
+  execution_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  response_data?: any;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para Configuração de Automação
+export interface AutomationConfig {
+  id: string;
+  psychologist_id: string;
+  n8n_webhook_url?: string;
+  n8n_api_key?: string;
+  evolution_api_url?: string;
+  evolution_api_key?: string;
+  evolution_instance_name?: string;
+  default_timeout: number;
+  retry_attempts: number;
+  enable_logging: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para Log de Webhook
+export interface WebhookLog {
+  id: string;
+  source: 'n8n' | 'evolution' | 'whatsapp';
+  endpoint: string;
+  method: string;
+  payload: any;
+  response_status?: number;
+  response_body?: string;
+  processing_time_ms?: number;
+  error_message?: string;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+}
+
+// Interface para Métricas de Automação
+export interface AutomationMetric {
+  id: string;
+  automation_id: string;
+  date: string;
+  messages_sent: number;
+  messages_delivered: number;
+  messages_read: number;
+  messages_failed: number;
+  avg_response_time_ms?: number;
+  unique_recipients: number;
+  created_at: string;
+}
+
+// Interface para Conversa (atualizada)
+export interface IntegratedConversation extends Conversation {
+  evolution_chat_id?: string;
+  n8n_context?: any;
+  automation_enabled: boolean;
+  last_automation_at?: string;
+}
+
+// Interface para Mensagem (atualizada)
+export interface IntegratedMessage extends Message {
+  automation_id?: string;
+  n8n_execution_id?: string;
+  evolution_message_id?: string;
+  metadata?: any;
+  read_at?: string;
+}
+
+// Props para componentes de automação
+export interface AutomationListProps {
+  automations: Automation[];
+  onEdit: (automation: Automation) => void;
+  onDelete: (id: string) => void;
+  onToggleStatus: (id: string, status: AutomationStatus) => void;
+  loading?: boolean;
+}
+
+export interface AutomationFormProps {
+  automation?: Automation;
+  onSubmit: (automation: Omit<Automation, 'id' | 'psychologist_id' | 'created_at' | 'updated_at'>) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+export interface AutomationMetricsProps {
+  metrics: AutomationMetric[];
+  timeRange: 'day' | 'week' | 'month' | 'year';
+  onTimeRangeChange: (range: 'day' | 'week' | 'month' | 'year') => void;
+}
+
+export interface WebhookLogsProps {
+  logs: WebhookLog[];
+  filters: {
+    source?: 'n8n' | 'evolution_api';
+    status?: 'success' | 'error';
+    dateFrom?: string;
+    dateTo?: string;
+  };
+  onFiltersChange: (filters: any) => void;
+  onRetry: (logId: string) => void;
+}
+
+// Hooks para automações
+export interface UseAutomationsReturn {
+  automations: Automation[];
+  loading: boolean;
+  error: string | null;
+  createAutomation: (automation: Omit<Automation, 'id' | 'psychologist_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateAutomation: (id: string, updates: Partial<Automation>) => Promise<void>;
+  deleteAutomation: (id: string) => Promise<void>;
+  toggleAutomation: (id: string) => Promise<void>;
+  executeAutomation: (id: string, context?: any) => Promise<void>;
+  refreshAutomations: () => Promise<void>;
+}
+
+export interface UseIntegrationReturn {
+  config: AutomationConfig | null;
+  metrics: AutomationMetric[];
+  logs: WebhookLog[];
+  loading: boolean;
+  error: string | null;
+  updateConfig: (updates: Partial<AutomationConfig>) => Promise<void>;
+  testConnection: (service: 'n8n' | 'evolution' | 'both', config?: any) => Promise<any>;
+  retryWebhook: (logId: string) => Promise<void>;
+  getMetrics: (timeRange: string) => Promise<void>;
+  getLogs: (filters: any) => Promise<void>;
+}
+
+// Eventos WebSocket para automações
+export interface AutomationSocketEvents {
+  automation_executed: {
+    automationId: string;
+    conversationId: string;
+    status: 'success' | 'error';
+    result?: any;
+    error?: string;
+  };
+  webhook_received: {
+    source: 'n8n' | 'evolution_api';
+    eventType: string;
+    conversationId?: string;
+    data: any;
+  };
+  integration_status: {
+    service: 'n8n' | 'evolution_api';
+    status: 'connected' | 'disconnected' | 'error';
+    message?: string;
+  };
+}

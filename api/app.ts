@@ -18,6 +18,10 @@ import logRoutes from './routes/logs.js'
 import chatRoutes from './routes/chat.js'
 import whatsappRoutes from './routes/whatsapp.js'
 import templatesRoutes from './routes/templates.js'
+import webhooksRoutes from './routes/webhooks.js'
+import automationsRoutes from './routes/automations.js'
+import conversationsRoutes from './routes/conversations.js'
+import fernandaChatRoutes from './routes/fernanda-chat.js'
 import { requestLoggerMiddleware } from './services/logService.js'
 import { 
   securityHeaders, 
@@ -88,6 +92,10 @@ app.use('/api/logs', logRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/whatsapp', whatsappRoutes)
 app.use('/api/templates', templatesRoutes)
+app.use('/api/webhooks', webhooksRoutes)
+app.use('/api/automations', automationsRoutes)
+app.use('/api/conversations', conversationsRoutes)
+app.use('/api/fernanda', fernandaChatRoutes)
 
 /**
  * health

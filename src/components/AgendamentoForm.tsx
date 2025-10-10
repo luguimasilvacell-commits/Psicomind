@@ -7,12 +7,27 @@ import { supabase, type Agendamento, type Paciente } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from 'sonner'
 import { useCurrencyInput, useDateInput } from '../hooks/useMaskedInput'
-import { formatDateFromISO } from '../utils/masks'
+import { formatDateFromISO, isValidDate, parseDate } from '../utils/masks'
 import { supabaseWithRetry } from '../lib/supabaseUtils'
+import PacienteLookup from './PacienteLookup'
+import { CalendarPicker } from './CalendarPicker'
 
 const agendamentoSchema = z.object({
   paciente_id: z.string().min(1, 'Selecione um paciente'),
-  data: z.string().min(1, 'Data é obrigatória'),
+  data: z.string()
+    .min(1, 'Data é obrigatória')
+    .refine((date) => {
+      // Validar se a data está no formato ISO (YYYY-MM-DD) ou se pode ser convertida
+      if (date.includes('-') && date.length === 10) {
+        const dateObj = new Date(date)
+        return !isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 1900
+      }
+      // Se está no formato brasileiro (DD/MM/YYYY), validar e converter
+      if (date.includes('/') && date.length === 10) {
+        return isValidDate(date)
+      }
+      return false
+    }, 'Data inválida'),
   hora: z.string().min(1, 'Hora é obrigatória'),
   duracao_minutos: z.number().min(15, 'Duração mínima de 15 minutos').max(240, 'Duração máxima de 4 horas'),
   tipo: z.enum(['consulta', 'retorno', 'avaliacao', 'terapia']),
@@ -79,8 +94,12 @@ export default function AgendamentoForm({
   )
 
   const dataMask = useDateInput(
-    agendamento ? formatDateFromISO(agendamento.data_hora.split('T')[0]) : '',
-    (value, isoValue) => setValue('data', isoValue)
+    agendamento ? formatDateFromISO(agendamento.data_hora.split('T')[0]) : 
+    selectedDate ? formatDateFromISO(selectedDate.toISOString().split('T')[0]) : '',
+    (value, isoValue) => {
+      // Sincronizar com o react-hook-form
+      setValue('data', isoValue, { shouldValidate: true })
+    }
   )
 
   const watchedData = watch('data')
@@ -117,7 +136,7 @@ export default function AgendamentoForm({
         `)
         .eq('psicologo_id', psicologo.id)
         .eq('paciente_id', pacienteId)
-        .neq('id', agendamento?.id || '') // Excluir o agendamento atual se estiver editando
+        .neq('id', agendamento?.id || '00000000-0000-0000-0000-000000000000') // Excluir o agendamento atual se estiver editando
         .order('data_hora', { ascending: false })
         .limit(10)
 
@@ -169,57 +188,162 @@ export default function AgendamentoForm({
     const checkConflitos = async () => {
       if (!watchedData || !watchedHora || !watchedDuracao || !psicologo?.id) return
 
-      const dataHora = `${watchedData}T${watchedHora}:00`
-      const dataFim = new Date(dataHora)
+      // Validar formato da data
+      let dataISO: string
+      try {
+        if (watchedData.includes('/')) {
+          if (!isValidDate(watchedData)) return
+          dataISO = parseDate(watchedData)
+        } else if (watchedData.includes('-')) {
+          dataISO = watchedData
+        } else {
+          return
+        }
+      } catch (error) {
+        console.warn('Erro ao processar data para verificação de conflitos:', error)
+        return
+      }
+
+      const dataHoraInicio = new Date(`${dataISO}T${watchedHora}:00`)
+      const dataHoraFim = new Date(dataHoraInicio)
       const duracao = typeof watchedDuracao === 'number' ? watchedDuracao : 60
-      dataFim.setMinutes(dataFim.getMinutes() + duracao)
+      dataHoraFim.setMinutes(dataHoraFim.getMinutes() + duracao)
 
       try {
+        // Buscar todos os agendamentos do dia para verificar sobreposições
+        const inicioDay = new Date(dataISO)
+        inicioDay.setHours(0, 0, 0, 0)
+        const fimDay = new Date(dataISO)
+        fimDay.setHours(23, 59, 59, 999)
+
         const { data, error } = await supabaseWithRetry(
           async () => {
             return await supabase
               .from('agendamentos')
               .select('*, paciente:pacientes(*)')
               .eq('psicologo_id', psicologo.id)
-              .gte('data_hora', dataHora)
-              .lt('data_hora', dataFim.toISOString())
+              .gte('data_hora', inicioDay.toISOString())
+              .lte('data_hora', fimDay.toISOString())
               .neq('status', 'cancelado')
+              .neq('status', 'faltou')
           },
           {
             maxRetries: 3,
-            showToast: false // Não mostrar toast para verificação de conflitos
+            showToast: false
           }
         )
 
         if (error) throw error
 
-        // Filtrar o agendamento atual se estiver editando
-        const conflitosEncontrados = (data || []).filter(a => 
-          agendamento ? a.id !== agendamento.id : true
-        )
+        // Verificar sobreposições mais precisas
+        const conflitosEncontrados = (data || []).filter(agendamentoExistente => {
+          // Excluir o agendamento atual se estiver editando
+          if (agendamento && agendamentoExistente.id === agendamento.id) return false
+
+          const existenteInicio = new Date(agendamentoExistente.data_hora)
+          const existenteFim = new Date(existenteInicio)
+          existenteFim.setMinutes(existenteFim.getMinutes() + (agendamentoExistente.duracao_minutos || 60))
+
+          // Verificar se há sobreposição
+          // Sobreposição ocorre quando:
+          // 1. O novo agendamento inicia antes do existente terminar E
+          // 2. O novo agendamento termina depois do existente iniciar
+          const hasSobreposicao = dataHoraInicio < existenteFim && dataHoraFim > existenteInicio
+
+          if (hasSobreposicao) {
+            console.log('🚨 Conflito detectado:', {
+              novo: {
+                inicio: dataHoraInicio.toLocaleString('pt-BR'),
+                fim: dataHoraFim.toLocaleString('pt-BR')
+              },
+              existente: {
+                id: agendamentoExistente.id,
+                paciente: agendamentoExistente.paciente?.nome,
+                inicio: existenteInicio.toLocaleString('pt-BR'),
+                fim: existenteFim.toLocaleString('pt-BR')
+              }
+            })
+          }
+
+          return hasSobreposicao
+        })
 
         setConflitos(conflitosEncontrados)
       } catch (error) {
         console.error('Erro ao verificar conflitos:', error)
-        // Em caso de erro, assumir que não há conflitos para não bloquear o usuário
         setConflitos([])
       }
     }
 
-    checkConflitos()
+    // Debounce para evitar muitas chamadas
+    const timeoutId = setTimeout(checkConflitos, 500)
+    return () => clearTimeout(timeoutId)
   }, [watchedData, watchedHora, watchedDuracao, psicologo?.id, agendamento?.id])
 
   const onSubmit = async (data: AgendamentoForm) => {
-    if (!psicologo?.id) return
+    if (!psicologo?.id) {
+      toast.error('Psicólogo não identificado. Faça login novamente.')
+      return
+    }
 
     if (conflitos.length > 0) {
       toast.error('Existe conflito de horário com outro agendamento')
       return
     }
 
+    // Validações adicionais antes do envio
+    if (!data.paciente_id) {
+      toast.error('Selecione um paciente')
+      return
+    }
+
+    if (!data.hora) {
+      toast.error('Selecione um horário')
+      return
+    }
+
+    // Validar e converter a data
+    let dataISO: string
+    try {
+      if (data.data.includes('/')) {
+        // Data no formato brasileiro DD/MM/YYYY
+        if (!isValidDate(data.data)) {
+          toast.error('Data inválida. Use o formato DD/MM/AAAA')
+          return
+        }
+        dataISO = parseDate(data.data)
+      } else if (data.data.includes('-')) {
+        // Data já no formato ISO
+        dataISO = data.data
+      } else {
+        toast.error('Formato de data inválido')
+        return
+      }
+
+      // Verificar se a data não é muito antiga
+      const dataObj = new Date(dataISO)
+      if (dataObj.getFullYear() < 1900) {
+        toast.error('Data muito antiga')
+        return
+      }
+
+      // Verificar se a data não é muito futura (mais de 2 anos)
+      const hoje = new Date()
+      const doisAnosNoFuturo = new Date()
+      doisAnosNoFuturo.setFullYear(hoje.getFullYear() + 2)
+      if (dataObj > doisAnosNoFuturo) {
+        toast.error('Data muito distante no futuro')
+        return
+      }
+    } catch (error) {
+      console.error('Erro ao processar data:', error)
+      toast.error('Erro ao processar a data. Verifique o formato.')
+      return
+    }
+
     setLoading(true)
     try {
-      const dataHora = `${dataMask.getISOValue()}T${data.hora}:00`
+      const dataHora = `${dataISO}T${data.hora}:00`
       
       const agendamentoData = {
         psicologo_id: psicologo.id,
@@ -233,8 +357,13 @@ export default function AgendamentoForm({
         valor: valorMask.getValue() || null,
       }
 
+      console.log('📝 Dados do agendamento a serem salvos:', agendamentoData)
+
       if (agendamento) {
         // Atualizar agendamento existente
+        console.log('🔄 Atualizando agendamento existente:', agendamento.id)
+        console.log('📊 Dados para atualização:', agendamentoData)
+        
         const { error } = await supabaseWithRetry(
           async () => {
             return await supabase
@@ -248,15 +377,30 @@ export default function AgendamentoForm({
           }
         )
 
-        if (error) throw error
+        if (error) {
+          console.error('❌ Erro ao atualizar agendamento:', error)
+          throw error
+        }
+        console.log('✅ Agendamento atualizado com sucesso!')
         toast.success('Agendamento atualizado com sucesso!')
       } else {
         // Criar novo agendamento
-        const { error } = await supabaseWithRetry(
+        console.log('➕ Criando novo agendamento...')
+        console.log('📊 Dados para inserção:', agendamentoData)
+        console.log('👨‍⚕️ Psicólogo ID:', psicologo.id)
+        console.log('👤 Paciente ID:', data.paciente_id)
+        
+        const { data: novoAgendamento, error } = await supabaseWithRetry(
           async () => {
-            return await supabase
+            console.log('🔄 Executando query de inserção...')
+            const result = await supabase
               .from('agendamentos')
               .insert(agendamentoData)
+              .select()
+              .single()
+            
+            console.log('📋 Resultado da query:', result)
+            return result
           },
           {
             maxRetries: 3,
@@ -264,15 +408,49 @@ export default function AgendamentoForm({
           }
         )
 
-        if (error) throw error
+        if (error) {
+          console.error('❌ Erro detalhado ao criar agendamento:', {
+            error,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          })
+          throw error
+        }
+        
+        console.log('✅ Novo agendamento criado com sucesso:', novoAgendamento)
+        console.log('🆔 ID do novo agendamento:', novoAgendamento?.id)
         toast.success('Agendamento criado com sucesso!')
       }
 
+      console.log('🔄 Chamando onSave para recarregar dados...')
       onSave()
+      console.log('🚪 Fechando formulário...')
       onClose()
     } catch (error: any) {
-      console.error('Erro ao salvar agendamento:', error)
-      toast.error('Erro ao salvar agendamento')
+      console.error('💥 Erro ao salvar agendamento:', error)
+      
+      // Tratamento de erros mais específico
+      let errorMessage = 'Erro ao salvar agendamento'
+      
+      if (error?.message) {
+        if (error.message.includes('duplicate key')) {
+          errorMessage = 'Já existe um agendamento neste horário'
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = 'Paciente ou psicólogo inválido'
+        } else if (error.message.includes('check constraint')) {
+          errorMessage = 'Dados inválidos. Verifique os campos preenchidos'
+        } else if (error.message.includes('not null')) {
+          errorMessage = 'Campos obrigatórios não preenchidos'
+        } else if (error.message.includes('invalid input syntax')) {
+          errorMessage = 'Formato de data ou hora inválido'
+        } else {
+          errorMessage = `Erro: ${error.message}`
+        }
+      }
+      
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -311,22 +489,13 @@ export default function AgendamentoForm({
               <User className="h-4 w-4 inline mr-1" />
               Paciente *
             </label>
-            <select
-              {...register('paciente_id')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione um paciente</option>
-              {pacientes
-                .sort((a, b) => a.nome.localeCompare(b.nome))
-                .map((paciente) => (
-                  <option key={paciente.id} value={paciente.id}>
-                    {paciente.nome}
-                  </option>
-                ))}
-            </select>
-            {errors.paciente_id && (
-              <p className="mt-1 text-sm text-red-600">{errors.paciente_id.message}</p>
-            )}
+            <PacienteLookup
+              pacientes={pacientes}
+              value={watch('paciente_id')}
+              onChange={(pacienteId) => setValue('paciente_id', pacienteId)}
+              error={errors.paciente_id?.message}
+              placeholder="Digite para buscar paciente..."
+            />
           </div>
 
           {/* Data e Hora */}
@@ -336,13 +505,12 @@ export default function AgendamentoForm({
                 <Calendar className="h-4 w-4 inline mr-1" />
                 Data *
               </label>
-              <input
-                type="text"
+              <CalendarPicker
                 value={dataMask.displayValue}
-                onChange={(e) => dataMask.onChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="DD/MM/AAAA"
-                maxLength={10}
+                onChange={dataMask.onChange}
+                placeholder="Selecione a data do agendamento"
+                minDate={new Date()}
+                showTimeSelect={false}
               />
               {errors.data && (
                 <p className="mt-1 text-sm text-red-600">{errors.data.message}</p>
@@ -564,15 +732,46 @@ export default function AgendamentoForm({
           {/* Conflitos */}
           {conflitos.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-red-800 mb-2">
-                ⚠️ Conflito de Horário Detectado
+              <h4 className="text-sm font-medium text-red-800 mb-3 flex items-center gap-2">
+                ⚠️ Conflito de Horário Detectado ({conflitos.length} {conflitos.length === 1 ? 'conflito' : 'conflitos'})
               </h4>
-              <div className="space-y-1">
-                {conflitos.map((conflito) => (
-                  <p key={conflito.id} className="text-sm text-red-700">
-                    • {conflito.paciente?.nome} - {new Date(conflito.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                ))}
+              <div className="space-y-2">
+                {conflitos.map((conflito) => {
+                  const inicioConflito = new Date(conflito.data_hora)
+                  const fimConflito = new Date(inicioConflito)
+                  fimConflito.setMinutes(fimConflito.getMinutes() + (conflito.duracao_minutos || 60))
+                  
+                  return (
+                    <div key={conflito.id} className="bg-white border border-red-200 rounded p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-red-800">
+                          {conflito.paciente?.nome || 'Paciente não identificado'}
+                        </span>
+                        <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                          {conflito.tipo || 'consulta'}
+                        </span>
+                      </div>
+                      <div className="text-sm text-red-700">
+                        <div className="flex items-center gap-4">
+                          <span>
+                            🕐 {inicioConflito.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {fimConflito.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span>
+                            ⏱️ {conflito.duracao_minutos || 60} min
+                          </span>
+                        </div>
+                        {conflito.observacoes && (
+                          <div className="mt-1 text-xs text-red-600">
+                            💬 {conflito.observacoes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-700">
+                💡 <strong>Dica:</strong> Ajuste o horário ou duração para evitar sobreposições com os agendamentos existentes.
               </div>
             </div>
           )}

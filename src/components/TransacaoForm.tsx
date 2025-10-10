@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 import { toast } from 'sonner'
 import { useCurrencyInput, useDateInput } from '../hooks/useMaskedInput'
 import { formatDateFromISO } from '../utils/masks'
+import { ReciboGenerator, type ReciboData, generateReciboNumber } from '../utils/reciboGenerator'
 
 const transacaoSchema = z.object({
   tipo: z.enum(['receita', 'despesa'], { required_error: 'Selecione o tipo da transação' }),
@@ -34,6 +35,7 @@ interface TransacaoFormProps {
 export default function TransacaoForm({ transacao, pacientes, onClose, onSave }: TransacaoFormProps) {
   const { psicologo } = useAuthStore()
   const [loading, setLoading] = React.useState(false)
+  const [loadingRecibo, setLoadingRecibo] = React.useState(false)
 
   const {
     register,
@@ -116,6 +118,73 @@ export default function TransacaoForm({ transacao, pacientes, onClose, onSave }:
       toast.error('Erro ao salvar transação')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleEnviarRecibo = async () => {
+    if (!transacao || !psicologo) {
+      toast.error('Dados insuficientes para gerar o recibo')
+      return
+    }
+
+    // Validação de paciente obrigatório
+    const pacienteSelecionado = pacientes.find(p => p.id === watch('paciente_id'))
+    if (!pacienteSelecionado) {
+      toast.error('Selecione um paciente para gerar o recibo')
+      return
+    }
+
+    // Validação de tipo e status
+    if (watch('tipo') !== 'receita') {
+      toast.error('Recibos só podem ser gerados para receitas')
+      return
+    }
+
+    if (watch('status') !== 'pago') {
+      toast.error('Recibos só podem ser gerados para transações pagas')
+      return
+    }
+
+    try {
+      setLoadingRecibo(true)
+
+      // Preparar dados do recibo
+      const numeroRecibo = await generateReciboNumber()
+      const reciboData: ReciboData = {
+        numero_recibo: numeroRecibo,
+        valor_recibo: valorMask.getValue(),
+        data_emissao: new Date().toISOString(),
+        descricao_servico: watch('descricao') || 'Serviços de Psicologia',
+        forma_pagamento: watch('forma_pagamento'),
+        data_pagamento: watch('data_transacao'),
+        observacoes: watch('observacoes'),
+
+        // Dados do emissor (psicólogo)
+        emissor_nome: psicologo.nome,
+        emissor_cpf: psicologo.cpf,
+        emissor_crp: psicologo.crp,
+        emissor_endereco: psicologo.endereco,
+        emissor_telefone: psicologo.telefone,
+        emissor_email: psicologo.email,
+
+        // Dados do pagador (paciente)
+        pagador_nome: pacienteSelecionado.nome,
+        pagador_cpf: pacienteSelecionado.cpf,
+        pagador_endereco: pacienteSelecionado.endereco,
+        pagador_telefone: pacienteSelecionado.telefone,
+        pagador_email: pacienteSelecionado.email,
+      }
+
+      // Gerar e baixar o recibo
+      const reciboGenerator = new ReciboGenerator()
+      reciboGenerator.downloadRecibo(reciboData, `recibo-${numeroRecibo}.pdf`)
+
+      toast.success('Recibo gerado e baixado com sucesso!')
+    } catch (error) {
+      console.error('Erro ao gerar recibo:', error)
+      toast.error('Erro ao gerar o recibo')
+    } finally {
+      setLoadingRecibo(false)
     }
   }
 
@@ -383,6 +452,38 @@ export default function TransacaoForm({ transacao, pacientes, onClose, onSave }:
             >
               Cancelar
             </button>
+            
+            {/* Botão Enviar Recibo - sempre visível para transações existentes */}
+            {transacao && (
+              <button
+                type="button"
+                onClick={handleEnviarRecibo}
+                disabled={
+                  loadingRecibo || 
+                  watch('tipo') !== 'receita' || 
+                  watch('status') !== 'pago' || 
+                  !watch('paciente_id')
+                }
+                title={
+                  !watch('paciente_id') 
+                    ? 'Selecione um paciente para gerar o recibo'
+                    : watch('tipo') !== 'receita'
+                    ? 'Recibos só podem ser gerados para receitas'
+                    : watch('status') !== 'pago'
+                    ? 'Recibos só podem ser gerados para transações pagas'
+                    : 'Gerar e baixar recibo da transação'
+                }
+                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loadingRecibo ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                Enviar Recibo
+              </button>
+            )}
+            
             <button
               type="submit"
               disabled={loading}

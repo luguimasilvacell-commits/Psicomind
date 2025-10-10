@@ -10,20 +10,20 @@ import { useSocket } from '../../hooks/useSocket';
 
 
 const ChatInterface: React.FC = () => {
-  const {
-    conversations,
-    selectedConversation,
-    messages,
-    loading,
+  const { 
+    conversations, 
+    selectedConversation, 
+    messages, 
+    loading, 
     error,
     searchTerm,
     setSearchTerm,
-    selectConversation,
-    sendMessage,
+    selectConversation, 
+    sendMessage, 
     markAsRead,
-    refreshConversations
+    getWebhookStatus
   } = useChat();
-
+  
   const { connected: socketConnected, error: socketError } = useSocket();
 
   // Show connection status
@@ -88,6 +88,7 @@ const ChatInterface: React.FC = () => {
             onSendMessage={sendMessage}
             onMarkAsRead={markAsRead}
             loading={loading}
+            getWebhookStatus={getWebhookStatus}
           />
         </div>
       </div>

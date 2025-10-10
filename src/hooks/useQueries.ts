@@ -3,7 +3,7 @@ import { supabase, type Paciente, type Agendamento, type Prontuario, type Transa
 import { queryKeys, invalidateQueries } from '../lib/queryClient'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from 'sonner'
-import { supabaseWithRetry } from '../lib/supabaseUtils'
+import { useSupabaseQuery } from './useSupabaseQuery'
 
 // Hook para buscar pacientes
 export const usePacientes = (filters?: { search?: string; status?: string }) => {
@@ -14,34 +14,21 @@ export const usePacientes = (filters?: { search?: string; status?: string }) => 
     queryFn: async () => {
       if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
       
-      const cacheKey = `pacientes_${psicologo.id}_${JSON.stringify(filters || {})}`
+      let query = supabase
+        .from('pacientes')
+        .select('*')
+        .eq('psicologo_id', psicologo.id)
+        .order('nome')
       
-      const { data, error } = await supabaseWithRetry(
-        async () => {
-          let query = supabase
-            .from('pacientes')
-            .select('*')
-            .eq('psicologo_id', psicologo.id)
-            .order('nome')
-          
-          if (filters?.search) {
-            query = query.or(`nome.ilike.%${filters.search}%,cpf.ilike.%${filters.search}%,telefone.ilike.%${filters.search}%`)
-          }
-          
-          if (filters?.status && filters.status !== 'todos') {
-            query = query.eq('status', filters.status)
-          }
-          
-          return await query
-        },
-        {
-          useCache: true,
-          cacheKey,
-          cacheTtl: 2 * 60 * 1000, // 2 minutos
-          maxRetries: 5,
-          showToast: false // Evitar múltiplos toasts
-        }
-      )
+      if (filters?.search) {
+        query = query.or(`nome.ilike.%${filters.search}%,email.ilike.%${filters.search}%`)
+      }
+      
+      if (filters?.status && filters.status !== 'todos') {
+        query = query.eq('status', filters.status)
+      }
+      
+      const { data, error } = await query
       
       if (error) throw error
       return data as Paciente[]
@@ -61,45 +48,36 @@ export const useAgendamentos = (filters?: { search?: string; status?: string; da
     queryFn: async () => {
       if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
       
-      const cacheKey = `agendamentos_${psicologo.id}_${JSON.stringify(filters || {})}`
+      let query = supabase
+        .from('agendamentos')
+        .select(`
+          *,
+          paciente:pacientes(id, nome, telefone)
+        `)
+        .eq('psicologo_id', psicologo.id)
+        .order('data_hora', { ascending: true })
       
-      const { data, error } = await supabaseWithRetry(
-        async () => {
-          let query = supabase
-            .from('agendamentos')
-            .select(`
-              *,
-              paciente:pacientes(id, nome, telefone)
-            `)
-            .eq('psicologo_id', psicologo.id)
-            .order('data_hora', { ascending: true })
-          
-          if (filters?.date) {
-            const startDate = `${filters.date}T00:00:00`
-            const endDate = `${filters.date}T23:59:59`
-            query = query.gte('data_hora', startDate).lte('data_hora', endDate)
-          }
-          
-          if (filters?.status && filters.status !== 'todos') {
-            query = query.eq('status', filters.status)
-          }
-          
-          return await query
-        },
-        {
-          useCache: true,
-          cacheKey,
-          cacheTtl: 1 * 60 * 1000, // 1 minuto para agendamentos (dados mais dinâmicos)
-          maxRetries: 5,
-          showToast: false
-        }
-      )
+      if (filters?.date) {
+        const startDate = `${filters.date}T00:00:00`
+        const endDate = `${filters.date}T23:59:59`
+        query = query.gte('data_hora', startDate).lte('data_hora', endDate)
+      }
+      
+      if (filters?.status && filters.status !== 'todos') {
+        query = query.eq('status', filters.status)
+      }
+      
+      if (filters?.search) {
+        // Buscar por nome do paciente ou observações
+        query = query.or(`observacoes.ilike.%${filters.search}%`)
+      }
+      
+      const { data, error } = await query
       
       if (error) throw error
       return data as Agendamento[]
     },
     enabled: !!psicologo?.id,
-    retry: false,
     staleTime: 30 * 1000, // 30 segundos
   })
 }
@@ -178,73 +156,77 @@ export const useDashboardStats = () => {
     queryFn: async () => {
       if (!psicologo?.id) throw new Error('Psicólogo não encontrado')
       
-      // Buscar total de pacientes
-      const { count: totalPacientes } = await supabase
-        .from('pacientes')
-        .select('*', { count: 'exact', head: true })
-        .eq('psicologo_id', psicologo.id)
-        .eq('status', 'ativo')
+      console.log('📊 [Dashboard] Carregando estatísticas...')
       
-      // Buscar agendamentos de hoje
-      const today = new Date().toISOString().split('T')[0]
-      const { count: agendamentosHoje } = await supabase
-        .from('agendamentos')
-        .select('*', { count: 'exact', head: true })
-        .eq('psicologo_id', psicologo.id)
-        .gte('data_hora', `${today}T00:00:00`)
-        .lt('data_hora', `${today}T23:59:59`)
-      
-      // Buscar receita mensal
-      const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-      const { data: transacoes } = await supabase
-        .from('transacoes_financeiras')
-        .select('valor')
-        .eq('psicologo_id', psicologo.id)
-        .eq('tipo', 'receita')
-        .eq('status', 'pago')
-        .gte('data_transacao', firstDayOfMonth)
-      
-      const receitaMensal = transacoes?.reduce((sum, t) => sum + Number(t.valor), 0) || 0
-      
-      // Buscar prontuários pendentes (agendamentos realizados sem prontuário)
-      const { data: agendamentosRealizados, error: agendamentosError } = await supabase
-        .from('agendamentos')
-        .select('id')
-        .eq('psicologo_id', psicologo.id)
-        .eq('status', 'realizado')
-      
-      let prontuariosPendentes = 0
-      
-      if (!agendamentosError && agendamentosRealizados && agendamentosRealizados.length > 0) {
-        const agendamentoIds = agendamentosRealizados.map(a => a.id)
+      try {
+        // Buscar total de pacientes com delay
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const { count: totalPacientes, error: pacientesError } = await supabase
+          .from('pacientes')
+          .select('*', { count: 'exact', head: true })
+          .eq('psicologo_id', psicologo.id)
+          .eq('status', 'ativo')
         
-        try {
-          const { data: prontuariosExistentes, error: prontuariosError } = await supabase
-            .from('prontuarios')
-            .select('agendamento_id')
-            .in('agendamento_id', agendamentoIds)
-            .not('agendamento_id', 'is', null)
-          
-          if (!prontuariosError && prontuariosExistentes) {
-            const prontuariosIds = prontuariosExistentes.map(p => p.agendamento_id).filter(Boolean)
-            prontuariosPendentes = agendamentoIds.filter(id => !prontuariosIds.includes(id)).length
-          }
-        } catch (error) {
-          // Se houver erro ao buscar prontuários, assumir 0 pendentes
-          console.warn('Erro ao buscar prontuários:', error)
-          prontuariosPendentes = 0
+        if (pacientesError) {
+          console.warn('⚠️ [Dashboard] Erro ao buscar pacientes:', pacientesError)
         }
-      }
-      
-      return {
-        totalPacientes: totalPacientes || 0,
-        agendamentosHoje: agendamentosHoje || 0,
-        receitaMensal,
-        prontuariosPendentes,
+        
+        // Buscar agendamentos de hoje com delay
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const today = new Date().toISOString().split('T')[0]
+        const { count: agendamentosHoje, error: agendamentosError } = await supabase
+          .from('agendamentos')
+          .select('*', { count: 'exact', head: true })
+          .eq('psicologo_id', psicologo.id)
+          .gte('data_hora', `${today}T00:00:00`)
+          .lt('data_hora', `${today}T23:59:59`)
+        
+        if (agendamentosError) {
+          console.warn('⚠️ [Dashboard] Erro ao buscar agendamentos:', agendamentosError)
+        }
+        
+        // Buscar receita mensal com delay
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+        const { data: transacoes, error: transacoesError } = await supabase
+          .from('transacoes_financeiras')
+          .select('valor')
+          .eq('psicologo_id', psicologo.id)
+          .eq('tipo', 'receita')
+          .eq('status', 'pago')
+          .gte('data_transacao', firstDayOfMonth)
+        
+        if (transacoesError) {
+          console.warn('⚠️ [Dashboard] Erro ao buscar transações:', transacoesError)
+        }
+        
+        const receitaMensal = transacoes?.reduce((sum, t) => sum + Number(t.valor), 0) || 0
+        
+        const result = {
+          totalPacientes: totalPacientes || 0,
+          agendamentosHoje: agendamentosHoje || 0,
+          receitaMensal,
+          prontuariosPendentes: 0, // Simplificado por enquanto
+        }
+        
+        console.log('✅ [Dashboard] Estatísticas carregadas:', result)
+        return result
+        
+      } catch (error) {
+        console.error('❌ [Dashboard] Erro ao carregar estatísticas:', error)
+        // Retornar dados padrão em caso de erro
+        return {
+          totalPacientes: 0,
+          agendamentosHoje: 0,
+          receitaMensal: 0,
+          prontuariosPendentes: 0,
+        }
       }
     },
     enabled: !!psicologo?.id,
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    staleTime: 30 * 1000, // 30 segundos
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   })
 }
 

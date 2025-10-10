@@ -7,7 +7,7 @@ import { Conversation, ConversationListProps } from '../../types/chat';
 
 const ConversationList: React.FC<ConversationListProps> = ({
   conversations,
-  selectedConversation,
+  selectedConversationId,
   onSelectConversation,
   searchTerm,
   onSearchChange,
@@ -101,7 +101,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation)}
                 className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  selectedConversation?.id === conversation.id 
+                  selectedConversationId === conversation.id 
                     ? 'bg-blue-50 border-r-2 border-blue-500' 
                     : ''
                 }`}
@@ -118,7 +118,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-sm font-medium text-gray-900 truncate">
-                        {conversation.patient_name}
+                        {conversation.patient?.nome || 'Paciente'}
                       </h3>
                       <div className="flex items-center space-x-2">
                         {conversation.last_message_at && (
@@ -161,15 +161,15 @@ const ConversationList: React.FC<ConversationListProps> = ({
                     <div className="flex items-center justify-between mt-1">
                       <div className="flex items-center space-x-2">
                         <span className="text-xs text-gray-500">
-                          {conversation.phone_number}
+                          {conversation.patient?.telefone || 'Telefone não informado'}
                         </span>
                       </div>
                       
                       <div className="flex items-center space-x-1">
-                        {conversation.status === 'active' && (
+                        {conversation.is_active && (
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                         )}
-                        {conversation.status === 'archived' && (
+                        {!conversation.is_active && (
                           <Clock className="w-3 h-3 text-gray-400" />
                         )}
                       </div>

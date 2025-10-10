@@ -38,41 +38,51 @@ export const useMaskedInput = ({ initialValue = '', maskType, onChange }: UseMas
     }
   })
 
-  const handleChange = useCallback((newValue: string) => {
-    let formattedValue = ''
-    let rawValue = ''
+  const handleChange = useCallback((newValue: string | number | null | undefined) => {
+    try {
+      let formattedValue = ''
+      let rawValue = ''
 
-    switch (maskType) {
-      case 'cpf':
-        formattedValue = formatCPF(newValue)
-        rawValue = removeNonNumeric(newValue)
-        break
-      case 'phone':
-        formattedValue = formatPhone(newValue)
-        rawValue = removeNonNumeric(newValue)
-        break
-      case 'cep':
-        formattedValue = formatCEP(newValue)
-        rawValue = removeNonNumeric(newValue)
-        break
-      case 'date':
-        formattedValue = formatDate(newValue)
-        rawValue = removeNonNumeric(newValue)
-        break
-      case 'currency':
-        // Para moeda, permitimos números, vírgulas e pontos
-        const cleanValue = newValue.replace(/[^\d,.-]/g, '')
-        const numericValue = parseFloat(cleanValue.replace(',', '.')) || 0
-        formattedValue = formatCurrency(numericValue)
-        rawValue = numericValue.toString()
-        break
-      default:
-        formattedValue = newValue
-        rawValue = newValue
+      // Garantir que newValue seja uma string
+      const safeValue = newValue === null || newValue === undefined ? '' : String(newValue)
+
+      switch (maskType) {
+        case 'cpf':
+          formattedValue = formatCPF(safeValue)
+          rawValue = removeNonNumeric(safeValue)
+          break
+        case 'phone':
+          formattedValue = formatPhone(safeValue)
+          rawValue = removeNonNumeric(safeValue)
+          break
+        case 'cep':
+          formattedValue = formatCEP(safeValue)
+          rawValue = removeNonNumeric(safeValue)
+          break
+        case 'date':
+          formattedValue = formatDate(safeValue)
+          rawValue = removeNonNumeric(safeValue)
+          break
+        case 'currency':
+          // Para moeda, permitimos números, vírgulas e pontos
+          const cleanValue = safeValue.replace(/[^\d,.-]/g, '')
+          const numericValue = parseFloat(cleanValue.replace(',', '.')) || 0
+          formattedValue = formatCurrency(numericValue)
+          rawValue = numericValue.toString()
+          break
+        default:
+          formattedValue = safeValue
+          rawValue = safeValue
+      }
+
+      setValue(formattedValue)
+      onChange?.(formattedValue, rawValue)
+    } catch (error) {
+      console.error('❌ Error in handleChange:', error, 'newValue:', newValue, 'maskType:', maskType)
+      // Em caso de erro, usar valor vazio
+      setValue('')
+      onChange?.('', '')
     }
-
-    setValue(formattedValue)
-    onChange?.(formattedValue, rawValue)
   }, [maskType, onChange])
 
   const getRawValue = useCallback(() => {

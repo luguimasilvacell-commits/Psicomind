@@ -28,7 +28,7 @@ const Relatorios = React.lazy(() => import('./pages/Relatorios'))
 
 // Chat pages
 const Chat = React.lazy(() => import('./pages/Chat'))
-const MessageTemplates = React.lazy(() => import('./pages/MessageTemplates'))
+const Automations = React.lazy(() => import('./pages/Automations'))
 
 // WhatsApp pages
 const WhatsAppConfig = React.lazy(() => import('./pages/WhatsAppConfig'))
@@ -105,9 +105,9 @@ export default function App() {
                 <Chat />
               </PageLoader>
             } />
-            <Route path="message-templates" element={
+            <Route path="automations" element={
               <PageLoader>
-                <MessageTemplates />
+                <Automations />
               </PageLoader>
             } />
             <Route path="whatsapp-config" element={

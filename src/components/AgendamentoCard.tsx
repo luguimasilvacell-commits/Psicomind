@@ -87,8 +87,6 @@ export default function AgendamentoCard({
            !isAgendamentoPassado()
   }
 
-
-
   if (compact) {
     return (
       <div className={`rounded-lg border p-3 ${getStatusColor()}`}>
@@ -103,9 +101,14 @@ export default function AgendamentoCard({
             </div>
           </div>
           <div className="text-right">
-            <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor()}`}>
-              {agendamento.status}
-            </div>
+            {/* Nova tag principal com hora e nome */}
+            <button
+              onClick={() => onEditarAgendamento?.(agendamento)}
+              className="px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-medium rounded-lg shadow-md hover:from-blue-600 hover:to-blue-700 transition-colors cursor-pointer"
+              title="Clique para editar o agendamento"
+            >
+              {new Date(agendamento.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {agendamento.paciente?.nome}
+            </button>
           </div>
         </div>
       </div>
@@ -123,14 +126,16 @@ export default function AgendamentoCard({
             <div className="text-sm text-gray-600">{agendamento.tipo}</div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor()}`}>
-            {agendamento.status}
+        {/* Nova tag principal com hora e nome */}
+        <button
+          onClick={() => onEditarAgendamento?.(agendamento)}
+          className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium rounded-xl shadow-lg hover:from-blue-600 hover:to-blue-700 transition-colors cursor-pointer"
+          title="Clique para editar o agendamento"
+        >
+          <div className="text-sm">
+            {new Date(agendamento.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {agendamento.paciente?.nome}
           </div>
-          <div className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-            {getStatusText()}
-          </div>
-        </div>
+        </button>
       </div>
 
       {/* Informações */}

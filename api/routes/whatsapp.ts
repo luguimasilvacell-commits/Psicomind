@@ -2,7 +2,9 @@ import express from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import { whatsappService } from '../services/whatsappService.js';
 import { supabase } from '../lib/supabase.js';
-import { logService } from '../services/logService.js';
+import { LoggingService, LogLevel, LogCategory } from '../../src/services/loggingService.js';
+
+const logger = LoggingService.getInstance();
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -34,7 +36,7 @@ router.post('/initialize',
 
       const result = await whatsappService.initializeClient(psychologistId);
       
-      logService.log('info', `Inicialização WhatsApp para ${psychologistId}: ${result.message}`);
+      logger.info(LogCategory.INTEGRATION, `Inicialização WhatsApp para ${psychologistId}: ${result.message}`);
       
       res.json({
         success: result.success,
@@ -42,7 +44,7 @@ router.post('/initialize',
         session_id: psychologistId
       });
     } catch (error) {
-      logService.log('error', `Erro ao inicializar WhatsApp: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao inicializar WhatsApp: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -70,7 +72,7 @@ router.get('/qr-code',
         status: status
       });
     } catch (error) {
-      logService.log('error', `Erro ao obter QR Code: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao obter QR Code: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -111,7 +113,7 @@ router.get('/status',
         } : null
       });
     } catch (error) {
-      logService.log('error', `Erro ao obter status: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao obter status: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -140,11 +142,11 @@ router.post('/send-message',
 
       const result = await whatsappService.sendMessage(psychologistId, to, message, type);
       
-      logService.log('info', `Mensagem enviada de ${psychologistId} para ${to}: ${result.success}`);
+      logger.info(LogCategory.INTEGRATION, `Mensagem enviada de ${psychologistId} para ${to}: ${result.success}`);
       
       res.json(result);
     } catch (error) {
-      logService.log('error', `Erro ao enviar mensagem: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao enviar mensagem: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -170,7 +172,7 @@ router.get('/conversations',
         conversations: conversations
       });
     } catch (error) {
-      logService.log('error', `Erro ao obter conversas: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao obter conversas: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -214,7 +216,7 @@ router.get('/messages/:conversation_id',
         messages: messages
       });
     } catch (error) {
-      logService.log('error', `Erro ao obter mensagens: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao obter mensagens: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -235,11 +237,11 @@ router.post('/disconnect',
 
       const result = await whatsappService.disconnectClient(psychologistId);
       
-      logService.log('info', `Desconexão WhatsApp para ${psychologistId}: ${result.message}`);
+      logger.info(LogCategory.INTEGRATION, `Desconexão WhatsApp para ${psychologistId}: ${result.message}`);
       
       res.json(result);
     } catch (error) {
-      logService.log('error', `Erro ao desconectar WhatsApp: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao desconectar WhatsApp: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -280,14 +282,14 @@ router.put('/settings',
 
       if (error) throw error;
 
-      logService.log('info', `Configurações WhatsApp atualizadas para ${psychologistId}`);
+      logger.info(LogCategory.INTEGRATION, `Configurações WhatsApp atualizadas para ${psychologistId}`);
 
       res.json({
         success: true,
         message: 'Configurações atualizadas com sucesso'
       });
     } catch (error) {
-      logService.log('error', `Erro ao atualizar configurações: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao atualizar configurações: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -319,7 +321,7 @@ router.get('/templates',
         templates: templates || []
       });
     } catch (error) {
-      logService.log('error', `Erro ao obter templates: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao obter templates: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -359,7 +361,7 @@ router.post('/templates',
 
       if (error) throw error;
 
-      logService.log('info', `Template criado por ${psychologistId}: ${name}`);
+      logger.info(LogCategory.INTEGRATION, `Template criado por ${psychologistId}: ${name}`);
 
       res.json({
         success: true,
@@ -367,7 +369,7 @@ router.post('/templates',
         template: template
       });
     } catch (error) {
-      logService.log('error', `Erro ao criar template: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao criar template: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -414,7 +416,7 @@ router.put('/templates/:template_id',
         return res.status(404).json({ success: false, message: 'Template não encontrado' });
       }
 
-      logService.log('info', `Template atualizado por ${psychologistId}: ${template_id}`);
+      logger.info(LogCategory.INTEGRATION, `Template atualizado por ${psychologistId}: ${template_id}`);
 
       res.json({
         success: true,
@@ -422,7 +424,7 @@ router.put('/templates/:template_id',
         template: template
       });
     } catch (error) {
-      logService.log('error', `Erro ao atualizar template: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao atualizar template: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -455,14 +457,14 @@ router.delete('/templates/:template_id',
 
       if (error) throw error;
 
-      logService.log('info', `Template excluído por ${psychologistId}: ${template_id}`);
+      logger.info(LogCategory.INTEGRATION, `Template excluído por ${psychologistId}: ${template_id}`);
 
       res.json({
         success: true,
         message: 'Template excluído com sucesso'
       });
     } catch (error) {
-      logService.log('error', `Erro ao excluir template: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao excluir template: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -512,7 +514,7 @@ router.post('/mark-as-read',
         message: 'Mensagens marcadas como lidas'
       });
     } catch (error) {
-      logService.log('error', `Erro ao marcar como lidas: ${error}`);
+      logger.error(LogCategory.INTEGRATION, `Erro ao marcar como lidas: ${error}`);
       res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'

@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 import { toast } from 'sonner'
 import { useMaskedInput, useDateInput } from '../hooks/useMaskedInput'
 import { isValidCPF, isValidPhone, isValidCEP, formatDateFromISO } from '../utils/masks'
+import { CalendarPicker } from './CalendarPicker'
 
 const pacienteSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
@@ -332,12 +333,14 @@ export default function PacienteForm({ paciente, onClose, onSave }: PacienteForm
                   <Calendar className="h-4 w-4 inline mr-1" />
                   Data de Nascimento
                 </label>
-                <input
-                  type="text"
+                <CalendarPicker
                   value={dataNascimento.value}
                   onChange={dataNascimento.onChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="dd/mm/aaaa"
+                  placeholder="Selecione a data de nascimento"
+                  maxDate={new Date()}
+                  showYearDropdown
+                  scrollableYearDropdown
+                  yearDropdownItemNumber={100}
                 />
               </div>
             </div>

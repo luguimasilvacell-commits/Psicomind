@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { supabase, type Agendamento, type SessaoAtiva, type Prontuario } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from 'sonner'
+import { criarTransacaoFinanceiraAutomatica } from '../utils/financeiroUtils'
 
 export interface UseAgendamentoSessaoReturn {
   iniciarSessao: (agendamentoId: string) => Promise<boolean>
@@ -77,6 +78,16 @@ export const useAgendamentoSessao = (): UseAgendamentoSessaoReturn => {
 
       if (updateError) {
         throw updateError
+      }
+
+      // Criar transação financeira automática quando a sessão for finalizada
+      try {
+        await criarTransacaoFinanceiraAutomatica(agendamentoId, user.id)
+        console.log('✅ Transação financeira criada automaticamente para agendamento:', agendamentoId)
+      } catch (financeiroError) {
+        console.error('⚠️ Erro ao criar transação financeira automática:', financeiroError)
+        // Não falhar a operação principal por causa do erro financeiro
+        toast.warning('Sessão finalizada, mas houve um problema ao criar o registro financeiro')
       }
 
       toast.success('Sessão finalizada com sucesso!')

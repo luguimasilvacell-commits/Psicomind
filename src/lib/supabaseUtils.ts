@@ -60,17 +60,21 @@ export const dataCache = new SimpleCache()
 
 // Função para verificar se é um erro de rede
 const isNetworkError = (error: any): boolean => {
+  if (!error) return false
+  
+  const errorMessage = error.message?.toLowerCase() || ''
+  const errorCode = error.code?.toLowerCase() || ''
+  
   return (
-    error?.message?.includes('Failed to fetch') ||
-    error?.message?.includes('NetworkError') ||
-    error?.message?.includes('ERR_NETWORK') ||
-    error?.message?.includes('ERR_ABORTED') ||
-    error?.message?.includes('ERR_CONNECTION') ||
-    error?.message?.includes('ERR_INTERNET_DISCONNECTED') ||
-    error?.code === 'NETWORK_ERROR' ||
-    error?.code === 'FETCH_ERROR' ||
-    error?.name === 'NetworkError' ||
-    !navigator.onLine
+    errorMessage.includes('network') ||
+    errorMessage.includes('fetch') ||
+    errorMessage.includes('connection') ||
+    errorMessage.includes('timeout') ||
+    errorMessage.includes('aborted') ||
+    errorMessage.includes('err_aborted') ||
+    errorCode.includes('network') ||
+    errorCode === 'fetch_error' ||
+    errorCode === 'aborted'
   )
 }
 
@@ -115,10 +119,10 @@ interface RetryConfig {
 }
 
 const defaultRetryConfig: RetryConfig = {
-  maxRetries: 5,
-  baseDelay: 1000,
-  maxDelay: 10000,
-  backoffMultiplier: 2,
+  maxRetries: 3,
+  baseDelay: 500,
+  maxDelay: 5000,
+  backoffMultiplier: 1.5,
   showToast: true,
   useCache: false
 }

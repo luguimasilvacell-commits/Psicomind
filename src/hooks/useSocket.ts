@@ -133,6 +133,46 @@ export const useSocket = (): UseSocketReturn => {
     };
   }, [disconnect]);
 
+  // Eventos disponíveis
+  const events = {
+    // Eventos de mensagem
+    sendMessage: (data: { conversationId: string; content: string; type?: any }) => {
+      emit('send_message', data);
+    },
+
+    // Eventos de conversa
+    joinConversation: (conversationId: string) => {
+      emit('join_conversation', conversationId);
+    },
+
+    leaveConversation: (conversationId: string) => {
+      emit('leave_conversation', conversationId);
+    },
+
+    // Eventos de digitação
+    startTyping: (conversationId: string) => {
+      emit('typing_start', conversationId);
+    },
+
+    stopTyping: (conversationId: string) => {
+      emit('typing_stop', conversationId);
+    },
+
+    // Marcar mensagens como lidas
+    markAsRead: (conversationId: string, messageIds: string[]) => {
+      emit('mark_as_read', { conversationId, messageIds });
+    },
+
+    // Eventos de automação
+    triggerAutomation: (data: { automationId: string; conversationId: string; trigger: string }) => {
+      emit('trigger_automation', data);
+    },
+
+    testAutomation: (automationId: string) => {
+      emit('test_automation', automationId);
+    }
+  };
+
   return {
     connected,
     error,
@@ -140,6 +180,7 @@ export const useSocket = (): UseSocketReturn => {
     on,
     off,
     connect,
-    disconnect
+    disconnect,
+    events
   };
 };

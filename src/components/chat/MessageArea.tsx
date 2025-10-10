@@ -11,20 +11,27 @@ import {
   Video,
   User,
   Check,
-  CheckCheck
+  CheckCheck,
+  Zap,
+  ZapOff,
+  AlertCircle,
+  Clock,
+  TestTube
 } from 'lucide-react';
-import { Message, MessageAreaProps, MessageType } from '../../types/chat';
+import { Message, MessageAreaProps, MessageType, WebhookStatus } from '../../types/chat';
 
 const MessageArea: React.FC<MessageAreaProps> = ({
   conversation,
   messages,
   onSendMessage,
   loading,
-  onMarkAsRead
+  onMarkAsRead,
+  getWebhookStatus
 }) => {
   const [messageText, setMessageText] = React.useState('');
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [isTyping, setIsTyping] = React.useState(false);
+  const [testingWebhook, setTestingWebhook] = React.useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +81,47 @@ const MessageArea: React.FC<MessageAreaProps> = ({
     }
   };
 
+  const handleTestWebhook = async () => {
+    if (!conversation) return;
+    
+    setTestingWebhook(true);
+    
+    try {
+      const response = await fetch('/api/webhooks/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: `🧪 Mensagem de teste do webhook - ${new Date().toLocaleString('pt-BR')}`,
+          conversationId: conversation.id,
+          messageType: 'text',
+          senderType: 'patient',
+          patientName: conversation.patient?.nome || 'Paciente Teste',
+          phoneNumber: conversation.patient?.telefone || '+5511999999999',
+          metadata: {
+            test: true,
+            timestamp: new Date().toISOString()
+          }
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Teste de webhook enviado com sucesso:', result);
+      } else {
+        console.error('❌ Erro no teste de webhook:', result);
+        alert('Erro ao enviar teste de webhook: ' + (result.message || 'Erro desconhecido'));
+      }
+    } catch (error) {
+      console.error('❌ Erro ao testar webhook:', error);
+      alert('Erro ao conectar com o servidor para teste de webhook');
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('pt-BR', { 
       hour: '2-digit', 
@@ -89,6 +137,39 @@ const MessageArea: React.FC<MessageAreaProps> = ({
         return <CheckCheck className="w-4 h-4 text-gray-400" />;
       case 'read':
         return <CheckCheck className="w-4 h-4 text-blue-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const getWebhookStatusIcon = (messageId: string) => {
+    if (!getWebhookStatus) return null;
+    
+    const webhookStatus = getWebhookStatus(messageId);
+    if (!webhookStatus) return null;
+
+    switch (webhookStatus.status) {
+      case 'pending':
+        return (
+          <Clock 
+            className="w-3 h-3 text-yellow-500 animate-pulse" 
+            title="Enviando para automação..."
+          />
+        );
+      case 'success':
+        return (
+          <Zap 
+            className="w-3 h-3 text-green-500" 
+            title="Enviado para automação com sucesso"
+          />
+        );
+      case 'error':
+        return (
+          <AlertCircle 
+            className="w-3 h-3 text-red-500" 
+            title={`Erro na automação: ${webhookStatus.error || 'Erro desconhecido'}`}
+          />
+        );
       default:
         return null;
     }
@@ -259,8 +340,14 @@ const MessageArea: React.FC<MessageAreaProps> = ({
                     {formatTime(message.timestamp)}
                   </span>
                   {message.sender_type === 'psychologist' && (
-                    <div className="ml-1">
+                    <div className="flex items-center space-x-1 ml-1">
                       {getMessageStatusIcon(message.status)}
+                      {getWebhookStatusIcon(message.id)}
+                    </div>
+                  )}
+                  {message.sender_type === 'patient' && (
+                    <div className="ml-1">
+                      {getWebhookStatusIcon(message.id)}
                     </div>
                   )}
                 </div>
@@ -300,8 +387,22 @@ const MessageArea: React.FC<MessageAreaProps> = ({
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+            title="Anexar arquivo"
           >
             <Paperclip className="w-5 h-5" />
+          </button>
+          
+          <button
+            onClick={handleTestWebhook}
+            disabled={testingWebhook || !conversation}
+            className="p-2 text-purple-500 hover:text-purple-700 rounded-lg hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Testar recebimento de mensagem via webhook"
+          >
+            {testingWebhook ? (
+              <Clock className="w-5 h-5 animate-spin" />
+            ) : (
+              <TestTube className="w-5 h-5" />
+            )}
           </button>
           
           <div className="flex-1 relative">

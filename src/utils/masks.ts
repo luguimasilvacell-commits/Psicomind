@@ -1,12 +1,15 @@
 // Utilitários para máscaras brasileiras
 
 // Remove todos os caracteres não numéricos
-export const removeNonNumeric = (value: string): string => {
-  return value.replace(/\D/g, '')
+export const removeNonNumeric = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return ''
+  const stringValue = String(value)
+  return stringValue.replace(/\D/g, '')
 }
 
 // Máscara para CPF (000.000.000-00)
-export const formatCPF = (value: string): string => {
+export const formatCPF = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return ''
   const numbers = removeNonNumeric(value)
   
   if (numbers.length <= 3) return numbers
@@ -17,7 +20,8 @@ export const formatCPF = (value: string): string => {
 }
 
 // Máscara para telefone ((00) 00000-0000)
-export const formatPhone = (value: string): string => {
+export const formatPhone = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return ''
   const numbers = removeNonNumeric(value)
   
   if (numbers.length <= 2) return numbers
@@ -28,7 +32,8 @@ export const formatPhone = (value: string): string => {
 }
 
 // Máscara para CEP (00000-000)
-export const formatCEP = (value: string): string => {
+export const formatCEP = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return ''
   const numbers = removeNonNumeric(value)
   
   if (numbers.length <= 5) return numbers
@@ -36,7 +41,8 @@ export const formatCEP = (value: string): string => {
 }
 
 // Máscara para data (DD/MM/AAAA)
-export const formatDate = (value: string): string => {
+export const formatDate = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return ''
   const numbers = removeNonNumeric(value)
   
   if (numbers.length <= 2) return numbers

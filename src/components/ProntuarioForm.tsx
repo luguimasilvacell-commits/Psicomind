@@ -9,6 +9,8 @@ import { useProntuarioSessao } from '../hooks/useProntuarioSessao'
 import { toast } from 'sonner'
 import SessionTimer from './SessionTimer'
 import { useDateInput } from '@/hooks/useMaskedInput'
+import { FileUpload } from './FileUpload'
+import { FileList } from './FileList'
 
 const prontuarioSchema = z.object({
   agendamento_id: z.string()
@@ -44,6 +46,8 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
   const { psicologo } = useAuthStore()
   const [loading, setLoading] = React.useState(false)
   const [sessionTime, setSessionTime] = useState(prontuario?.duracao_sessao_segundos || 0)
+  const [fileListKey, setFileListKey] = useState(0) // Para forçar re-render da lista de arquivos
+
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null)
   const [sessionEndTime, setSessionEndTime] = useState<Date | null>(null)
   const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(agendamento || null)
@@ -146,28 +150,39 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
 
   // Filtrar agendamentos baseado no paciente selecionado
   const agendamentosFiltrados = useMemo(() => {
-    console.log('🔍 Filtrando agendamentos para paciente:', selectedPacienteId)
-    console.log('📋 Total de agendamentos disponíveis:', agendamentos.length)
+    console.log('🔍 [ProntuarioForm] Filtrando agendamentos para paciente:', selectedPacienteId)
+    console.log('📋 [ProntuarioForm] Total de agendamentos recebidos:', agendamentos.length)
+    console.log('📊 [ProntuarioForm] Agendamentos recebidos:', agendamentos.map(a => ({
+      id: a.id,
+      data: a.data_hora,
+      paciente: a.paciente?.nome,
+      pacienteId: a.paciente?.id,
+      status: a.status
+    })))
     
     if (!selectedPacienteId) {
-      console.log('⚠️ Nenhum paciente selecionado, retornando todos os agendamentos')
+      console.log('⚠️ [ProntuarioForm] Nenhum paciente selecionado, retornando todos os agendamentos')
       return agendamentos
     }
     
     const filtrados = agendamentos.filter(a => {
       const match = a.paciente?.id === selectedPacienteId
-      if (!match) {
-        console.log(`❌ Agendamento ${a.id} não corresponde - paciente: ${a.paciente?.id} vs selecionado: ${selectedPacienteId}`)
-      }
+      console.log(`🔍 [ProntuarioForm] Verificando agendamento ${a.id}:`, {
+        agendamentoPacienteId: a.paciente?.id,
+        selectedPacienteId,
+        pacienteNome: a.paciente?.nome,
+        match
+      })
       return match
     })
     
-    console.log(`✅ Agendamentos filtrados para paciente ${selectedPacienteId}:`, filtrados.length)
-    console.log('📊 Agendamentos filtrados:', filtrados.map(a => ({
+    console.log(`✅ [ProntuarioForm] Agendamentos filtrados para paciente ${selectedPacienteId}:`, filtrados.length)
+    console.log('📊 [ProntuarioForm] Detalhes dos agendamentos filtrados:', filtrados.map(a => ({
       id: a.id,
       data: a.data_hora,
       paciente: a.paciente?.nome,
-      pacienteId: a.paciente?.id
+      pacienteId: a.paciente?.id,
+      status: a.status
     })))
     
     return filtrados
@@ -176,18 +191,14 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
   // Função para ordenar agendamentos por proximidade ao horário atual
   const sortedAgendamentos = useMemo(() => {
     const now = new Date()
-    const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     
     return agendamentosFiltrados
       .filter(a => {
-        // Mostrar apenas agendamentos futuros, do dia atual ou o agendamento já vinculado ao prontuário
-        const agendamentoDate = new Date(a.data_hora)
-        const agendamentoDateOnly = new Date(agendamentoDate.getFullYear(), agendamentoDate.getMonth(), agendamentoDate.getDate())
-        
+        // Mostrar agendamentos confirmados, realizados ou o agendamento já vinculado ao prontuário
         return (
-          a.status === 'agendado' || 
-          a.id === prontuario?.agendamento_id ||
-          agendamentoDateOnly >= currentDate
+          a.status === 'confirmado' || 
+          a.status === 'realizado' ||
+          a.id === prontuario?.agendamento_id
         )
       })
       .sort((a, b) => {
@@ -195,15 +206,11 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
         if (a.id === prontuario?.agendamento_id) return -1
         if (b.id === prontuario?.agendamento_id) return 1
         
-        // Depois, ordenar por proximidade ao horário atual
+        // Depois, ordenar por data (mais recentes primeiro)
         const aTime = new Date(a.data_hora).getTime()
         const bTime = new Date(b.data_hora).getTime()
-        const nowTime = now.getTime()
         
-        const aDiff = Math.abs(aTime - nowTime)
-        const bDiff = Math.abs(bTime - nowTime)
-        
-        return aDiff - bDiff
+        return bTime - aTime
       })
   }, [agendamentosFiltrados, prontuario?.agendamento_id])
 
@@ -233,7 +240,8 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
   }
 
   const handlePacienteSelect = (paciente: any) => {
-    console.log('👤 Paciente selecionado:', paciente)
+    console.log('👤 [ProntuarioForm] Paciente selecionado:', paciente)
+    console.log('📋 [ProntuarioForm] Agendamentos disponíveis no momento da seleção:', agendamentos.length)
     setSelectedPacienteId(paciente.id)
     setSelectedPacienteName(paciente.nome)
     setSearchTerm(paciente.nome)
@@ -268,6 +276,16 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
     prontuario?.proxima_sessao ? new Date(prontuario.proxima_sessao).toLocaleDateString('pt-BR') : ''
   )
 
+  // Callbacks para gerenciamento de arquivos
+  const handleFileUploadComplete = useCallback(() => {
+    setFileListKey(prev => prev + 1) // Força re-render da lista
+    toast.success('Arquivos enviados com sucesso!')
+  }, [])
+
+  const handleFileDeleted = useCallback(() => {
+    setFileListKey(prev => prev + 1) // Força re-render da lista
+  }, [])
+
   const {
     register,
     handleSubmit,
@@ -299,6 +317,22 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
       setSelectedAgendamento(agendamento || null)
     }
   }, [watchedAgendamentoId, agendamentos])
+
+  // Selecionar automaticamente o agendamento quando há apenas um disponível
+  useEffect(() => {
+    console.log('🎯 [ProntuarioForm] Verificando seleção automática de agendamento')
+    console.log('📊 [ProntuarioForm] sortedAgendamentos.length:', sortedAgendamentos.length)
+    console.log('📊 [ProntuarioForm] selectedPacienteId:', selectedPacienteId)
+    console.log('📊 [ProntuarioForm] watchedAgendamentoId:', watchedAgendamentoId)
+    
+    // Se há um paciente selecionado, apenas um agendamento disponível e nenhum agendamento selecionado
+    if (selectedPacienteId && sortedAgendamentos.length === 1 && !watchedAgendamentoId) {
+      const agendamentoUnico = sortedAgendamentos[0]
+      console.log('✅ [ProntuarioForm] Selecionando automaticamente agendamento único:', agendamentoUnico.id)
+      setValue('agendamento_id', agendamentoUnico.id)
+      setSelectedAgendamento(agendamentoUnico)
+    }
+  }, [sortedAgendamentos, selectedPacienteId, watchedAgendamentoId, setValue])
 
   // Função para lidar com a mudança de paciente
   const handlePacienteChange = (pacienteId: string) => {
@@ -699,6 +733,51 @@ export default function ProntuarioForm({ prontuario, agendamento, agendamentos, 
               <p className="mt-1 text-sm text-red-600">{errors.proxima_sessao.message}</p>
             )}
           </div>
+
+          {/* Seção de Arquivos - só mostra se o prontuário já foi salvo */}
+          {prontuario?.id && (
+            <div className="space-y-6 pt-6 border-t border-gray-200">
+              <div>
+                <h4 className="text-lg font-medium text-gray-900 mb-4">
+                  <FileText className="h-5 w-5 inline mr-2" />
+                  Arquivos do Prontuário
+                </h4>
+                
+                {/* Lista de arquivos existentes */}
+                <div className="mb-6">
+                  <FileList
+                    key={fileListKey}
+                    prontuarioId={prontuario.id}
+                    onFileDeleted={handleFileDeleted}
+                  />
+                </div>
+
+                {/* Upload de novos arquivos */}
+                <div>
+                  <h5 className="text-sm font-medium text-gray-700 mb-3">Adicionar novos arquivos</h5>
+                  <FileUpload
+                    prontuarioId={prontuario.id}
+                    onUploadComplete={handleFileUploadComplete}
+                    maxFiles={5}
+                    maxSizeBytes={10 * 1024 * 1024} // 10MB
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Aviso para prontuários novos */}
+          {!prontuario?.id && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-amber-600 mr-2" />
+                <p className="text-sm text-amber-800">
+                  <strong>Nota:</strong> Para anexar arquivos, primeiro salve o prontuário. 
+                  Após salvar, você poderá fazer upload de documentos, imagens e outros arquivos relacionados à sessão.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Buttons */}
           <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">

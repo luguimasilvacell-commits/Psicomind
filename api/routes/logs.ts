@@ -126,7 +126,7 @@ router.post('/', logRateLimit, async (req, res) => {
       logData.message,
       logData.details,
       {
-        userId: logData.userId || req.user?.id,
+        userId: logData.userId || req.user?.userId,
         sessionId: logData.sessionId || req.sessionId,
         requestId: req.requestId,
         metadata: logData.metadata
@@ -162,7 +162,7 @@ router.post('/ai-interaction', logRateLimit, async (req, res) => {
     
     await logService.logAIInteraction({
       requestId: req.requestId || `ai_${Date.now()}`,
-      userId: req.user?.id || validatedData.userId,
+      userId: req.user?.userId || validatedData.userId,
       sessionId: req.sessionId || validatedData.sessionId,
       model: validatedData.model,
       prompt: validatedData.prompt,
@@ -220,7 +220,7 @@ router.post('/error', logRateLimit, async (req, res) => {
     if (stack) error.stack = stack
     
     await logService.logError(error, {
-      userId: req.user?.id,
+      userId: req.user?.userId,
       sessionId: req.sessionId,
       requestId: req.requestId,
       category: category || 'error_handling',
@@ -253,7 +253,7 @@ router.post('/security', adminLogRateLimit, async (req, res) => {
     }
     
     await logService.logSecurity(event, details, {
-      userId: req.user?.id,
+      userId: req.user?.userId,
       sessionId: req.sessionId,
       requestId: req.requestId
     })

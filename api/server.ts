@@ -3,7 +3,9 @@
  */
 import app from './app.js';
 import { createServer } from 'http';
-import { socketService } from './services/socketService.js';
+import { websocketService } from './services/websocketService.js';
+import { checkRedisConnection } from './lib/redis.js';
+import './services/queueProcessors.js'; // Inicializa os processadores de fila
 
 /**
  * start server with port
@@ -14,11 +16,22 @@ const PORT = process.env.PORT || 3001;
 const server = createServer(app);
 
 // Inicializar WebSocket
-socketService.initialize(server);
+websocketService.initialize(server);
 
-server.listen(PORT, () => {
+// Disponibilizar a instância do WebSocket para as rotas
+app.set('websocketService', websocketService);
+
+server.listen(PORT, async () => {
   console.log(`Server ready on port ${PORT}`);
   console.log(`WebSocket server initialized`);
+  
+  // Verificar conexão Redis
+  try {
+    await checkRedisConnection();
+    console.log('Redis connection established');
+  } catch (error) {
+    console.error('Redis connection failed:', error);
+  }
 });
 
 /**

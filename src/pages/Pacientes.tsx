@@ -1,22 +1,33 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Plus, Search, Filter, Edit, Trash2, Phone, Mail, Calendar, FileText, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase, type Paciente } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { formatDate } from '../lib/utils'
 import { toast } from 'sonner'
 import PacienteForm from '../components/PacienteForm'
 import HistoricoPaciente from '../components/HistoricoPaciente'
+import { usePacientes } from '../hooks/useQueries'
+import { useDebounce } from '../hooks/useDebounce'
 
 function Pacientes() {
   const { psicologo } = useAuthStore()
-  const [pacientes, setPacientes] = useState<Paciente[]>([])
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('todos')
   const [showForm, setShowForm] = useState(false)
   const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null)
   const [showHistorico, setShowHistorico] = useState(false)
   const [pacienteHistorico, setPacienteHistorico] = useState<Paciente | null>(null)
+
+  // Debounce do termo de busca para evitar requisições excessivas
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
+
+  // Usar o hook otimizado com retry e cache
+  const { data: pacientes = [], isLoading: loading, error } = usePacientes({
+    search: debouncedSearchTerm,
+    status: statusFilter === 'todos' ? undefined : statusFilter
+  })
 
   // Funções auxiliares para formatação segura
   const formatCPF = (cpf: string | null | undefined): string => {
@@ -38,48 +49,11 @@ function Pacientes() {
     }
   }
 
-  const loadPacientes = async () => {
-    if (!psicologo?.id) {
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    
-    try {
-      const { data, error } = await supabase
-        .from('pacientes')
-        .select('*')
-        .eq('psicologo_id', psicologo.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Erro ao carregar pacientes:', error)
-        toast.error('Erro ao carregar pacientes')
-      } else {
-        setPacientes(data || [])
-      }
-    } catch (error) {
-      console.error('Erro na requisição:', error)
-      toast.error('Erro ao carregar pacientes')
-    } finally {
-      setLoading(false)
-    }
+  // Mostrar erro se houver
+  if (error) {
+    console.error('Erro ao carregar pacientes:', error)
+    toast.error('Erro ao carregar pacientes')
   }
-
-  useEffect(() => {
-    loadPacientes()
-  }, [psicologo?.id])
-
-  const filteredPacientes = pacientes.filter(paciente => {
-    const matchesSearch = paciente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (paciente.cpf && paciente.cpf.includes(searchTerm)) ||
-                         (paciente.telefone && paciente.telefone.includes(searchTerm))
-    
-    const matchesStatus = statusFilter === 'todos' || paciente.status === statusFilter
-    
-    return matchesSearch && matchesStatus
-  })
 
   const handleEdit = (paciente: Paciente) => {
     setSelectedPaciente(paciente)
@@ -98,7 +72,7 @@ function Pacientes() {
       if (error) throw error
       
       toast.success('Paciente excluído com sucesso!')
-      loadPacientes()
+      // O cache será invalidado automaticamente pelo React Query
     } catch (error) {
       console.error('Erro ao excluir paciente:', error)
       toast.error('Erro ao excluir paciente')
@@ -118,6 +92,21 @@ function Pacientes() {
   const handleHistoricoClose = () => {
     setShowHistorico(false)
     setPacienteHistorico(null)
+  }
+
+  const handleNavigateToFinanceiro = (transacaoId?: string) => {
+    // Navegar para a página financeira, opcionalmente com uma transação específica
+    if (transacaoId) {
+      navigate(`/financeiro?transacao=${transacaoId}`)
+    } else {
+      navigate('/financeiro')
+    }
+  }
+
+  const handleEditProntuario = (prontuarioId: string, agendamentoId: string) => {
+    // Navegar para a página de prontuários com o prontuário específico para edição
+    navigate(`/prontuarios?edit=${prontuarioId}&agendamento=${agendamentoId}`)
+    toast.success('Abrindo prontuário para edição')
   }
 
   const handleFormSave = () => {
@@ -265,7 +254,7 @@ function Pacientes() {
 
       {/* Patients List */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        {filteredPacientes.length === 0 ? (
+        {pacientes.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500">
               {searchTerm || statusFilter !== 'todos' 
@@ -297,7 +286,7 @@ function Pacientes() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPacientes.map((paciente) => (
+                {pacientes.map((paciente) => (
                   <tr key={paciente.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
@@ -395,6 +384,8 @@ function Pacientes() {
               <HistoricoPaciente
                 pacienteId={pacienteHistorico.id}
                 pacienteNome={pacienteHistorico.nome}
+                onEditProntuario={handleEditProntuario}
+                onNavigateToFinanceiro={handleNavigateToFinanceiro}
               />
             </div>
           </div>

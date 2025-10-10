@@ -47,7 +47,7 @@ function Prontuarios() {
     if (!psicologo?.id) return
 
     try {
-      console.log('🔍 Carregando agendamentos para prontuários...')
+      console.log('🔍 [Prontuarios] Carregando agendamentos para prontuários...')
       
       // Buscar agendamentos confirmados, realizados e finalizados (mais flexível)
       const { data: agendamentosData, error: agendamentosError } = await supabase
@@ -76,10 +76,14 @@ function Prontuarios() {
         .in('status', ['confirmado', 'realizado'])
         .order('data_hora', { ascending: false })
 
-      console.log('📊 Agendamentos encontrados:', agendamentosData?.length || 0)
+      console.log('📊 [Prontuarios] Agendamentos encontrados:', agendamentosData?.length || 0)
+      console.log('📋 [Prontuarios] Detalhes dos agendamentos:')
+      agendamentosData?.forEach((a, index) => {
+        console.log(`  ${index + 1}. ID: ${a.id}, Data: ${a.data_hora}, Paciente: ${a.paciente?.nome} (ID: ${a.paciente?.id}), Status: ${a.status}`)
+      })
 
       if (agendamentosError) {
-        console.error('❌ Erro ao buscar agendamentos:', agendamentosError)
+        console.error('❌ [Prontuarios] Erro ao buscar agendamentos:', agendamentosError)
         throw agendamentosError
       }
 
@@ -90,27 +94,30 @@ function Prontuarios() {
         .eq('psicologo_id', psicologo.id)
 
       if (prontuariosError) {
-        console.error('❌ Erro ao buscar prontuários:', prontuariosError)
+        console.error('❌ [Prontuarios] Erro ao buscar prontuários:', prontuariosError)
         throw prontuariosError
       }
 
-      console.log('📋 Prontuários existentes:', prontuariosData?.length || 0)
+      console.log('📋 [Prontuarios] Prontuários existentes:', prontuariosData?.length || 0)
 
-      // Filtrar agendamentos que não têm prontuário
-      const agendamentosComProntuario = new Set(prontuariosData?.map(p => p.agendamento_id) || [])
-      const agendamentosSemProntuario = agendamentosData?.filter(a => !agendamentosComProntuario.has(a.id)) || []
+      // Para o ProntuarioForm, vamos passar TODOS os agendamentos
+      // A filtragem de prontuários existentes será feita dentro do próprio ProntuarioForm
+      console.log('✅ [Prontuarios] Total de agendamentos encontrados:', agendamentosData?.length || 0)
+      console.log('👥 [Prontuarios] Pacientes únicos:', [...new Set(agendamentosData?.map(a => a.paciente?.nome))].join(', '))
+      console.log('📊 [Prontuarios] Agendamentos que serão passados para ProntuarioForm:')
+      agendamentosData?.forEach((a, index) => {
+        console.log(`  ${index + 1}. ID: ${a.id}, Data: ${a.data_hora}, Paciente: ${a.paciente?.nome} (ID: ${a.paciente?.id}), Status: ${a.status}`)
+      })
 
-      console.log('✅ Agendamentos sem prontuário:', agendamentosSemProntuario.length)
-      console.log('👥 Pacientes únicos:', [...new Set(agendamentosSemProntuario.map(a => a.paciente?.nome))].join(', '))
-
-      setAgendamentos(agendamentosSemProntuario)
+      setAgendamentos(agendamentosData || [])
     } catch (error) {
-      console.error('💥 Erro ao carregar agendamentos:', error)
+      console.error('💥 [Prontuarios] Erro ao carregar agendamentos:', error)
       toast.error('Erro ao carregar agendamentos para prontuários')
     }
   }
 
   useEffect(() => {
+    console.log('🔄 [Prontuarios] Carregando dados da página de prontuários...')
     loadProntuarios()
     loadAgendamentos()
   }, [psicologo?.id])

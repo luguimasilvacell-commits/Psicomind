@@ -1,5 +1,5 @@
 import React from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts'
 import { Calendar, Download, Filter, TrendingUp, Users, DollarSign, FileText, Clock } from 'lucide-react'
 import { supabase, type Agendamento, type Paciente, type TransacaoFinanceira, type Prontuario } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
@@ -333,21 +333,47 @@ export default function Relatorios() {
         {/* Status dos Agendamentos */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Status dos Agendamentos</h3>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={400}>
             <PieChart>
               <Pie
                 data={statusAgendamentosData}
                 cx="50%"
-                cy="50%"
-                outerRadius={80}
+                cy="45%"
+                outerRadius={70}
+                innerRadius={30}
                 dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
+                nameKey="name"
+                paddingAngle={2}
+                strokeWidth={2}
+                stroke="#fff"
               >
                 {statusAgendamentosData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip 
+                formatter={(value, name) => [value, name]}
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}
+              />
+              <Legend 
+                verticalAlign="bottom" 
+                height={60}
+                iconType="circle"
+                wrapperStyle={{
+                  paddingTop: '20px',
+                  fontSize: '14px'
+                }}
+                formatter={(value) => (
+                  <span style={{ color: '#374151', fontWeight: '500' }}>
+                    {value}
+                  </span>
+                )}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

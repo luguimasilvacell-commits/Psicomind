@@ -10,11 +10,21 @@ import {
   Clock,
   UserPlus,
   CalendarPlus,
-  FileTextIcon
+  FileTextIcon,
+  Activity,
+  BarChart3
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { Skeleton, StatCardSkeleton, ChartSkeleton, ListSkeleton } from '@/components/ui/Skeleton'
+import { 
+  ModernStatCard,
+  ModernLineChart,
+  ModernBarChart,
+  ModernPieChart,
+  ModernSkeleton,
+  AnimatedIcon,
+  ModernStatusIndicator
+} from '@/components/modern'
 import { 
   useDashboardStats, 
   useRevenueData, 
@@ -109,7 +119,11 @@ export default function Dashboard() {
 
   if (statsLoading) {
     return (
-      <div className="space-y-6">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-6"
+      >
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -119,232 +133,235 @@ export default function Dashboard() {
         {/* Stats Cards Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
-            <StatCardSkeleton key={i} />
+            <ModernSkeleton key={i} variant="card" height="12rem" />
           ))}
         </div>
 
         {/* Charts Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartSkeleton />
-          <ChartSkeleton />
+          <ModernSkeleton variant="chart" />
+          <ModernSkeleton variant="chart" />
         </div>
 
         {/* Bottom Section Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <ChartSkeleton />
-          <ListSkeleton items={3} />
-          <ListSkeleton items={3} />
+          <ModernSkeleton variant="chart" height="16rem" />
+          <ModernSkeleton variant="card" height="16rem" />
+          <ModernSkeleton variant="card" height="16rem" />
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-8"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <motion.div 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="flex items-center justify-between"
+      >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Visão geral da sua prática clínica</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+          <div className="text-gray-600 flex items-center space-x-2">
+            <AnimatedIcon icon={Activity} animation="pulse" size={16} />
+            <span>Visão geral da sua prática clínica</span>
+          </div>
         </div>
         {psicologo && (
-          <div className="flex items-center space-x-4">
+          <motion.div 
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="flex items-center space-x-4"
+          >
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">{psicologo.nome}</p>
               <p className="text-sm text-gray-500">{psicologo.email}</p>
             </div>
-            <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-              isAdmin() 
-                ? 'bg-purple-100 text-purple-800' 
-                : 'bg-blue-100 text-blue-800'
-            }`}>
-              {isAdmin() ? '👑 Administrador' : '👨‍⚕️ Psicólogo'}
-            </div>
-          </div>
+            <ModernStatusIndicator
+              status={isAdmin() ? 'active' : 'success'}
+              label={isAdmin() ? 'Administrador' : 'Psicólogo'}
+              size="md"
+              showIcon={true}
+            />
+          </motion.div>
         )}
-      </div>
+      </motion.div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, index) => {
-          const TrendIcon = stat.changeType === 'positive' ? TrendingUp : TrendingDown
+          const gradients = [
+            'from-blue-500 to-blue-600',
+            'from-green-500 to-green-600', 
+            'from-purple-500 to-purple-600',
+            'from-orange-500 to-orange-600'
+          ];
           
           return (
-            <div 
-              key={index} 
-              className="bg-white p-6 rounded-lg shadow-sm border border-gray-200"
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", stat.iconBg)}>
-                    <stat.icon className={cn("h-5 w-5", stat.iconColor)} />
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">{stat.title}</p>
-                  <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="flex items-center">
-                  <div className={cn(
-                    "flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium",
-                    stat.changeType === 'positive' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  )}>
-                    <TrendIcon className="h-3 w-3" />
-                    <span>{stat.change}</span>
-                  </div>
-                  <span className="ml-2 text-xs text-gray-500">vs mês anterior</span>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">{stat.description}</p>
-              </div>
-            </div>
+            <ModernStatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              icon={stat.icon}
+              trend={{
+                value: stat.change,
+                type: stat.changeType as 'positive' | 'negative'
+              }}
+              gradient={gradients[index]}
+              description={stat.description}
+            />
           )
         })}
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+      >
         {/* Revenue Chart */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Receita Mensal</h3>
-          {revenueLoading ? (
-            <Skeleton className="h-[300px]" />
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={revenueData || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Receita']} />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#2563EB" 
-                  strokeWidth={2}
-                  dot={{ fill: '#2563EB' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+        {revenueLoading ? (
+          <ModernSkeleton variant="chart" />
+        ) : (
+          <ModernLineChart
+            data={revenueData || []}
+            dataKey="revenue"
+            title="Receita Mensal"
+            color="#3b82f6"
+            gradient={true}
+            height={350}
+          />
+        )}
 
         {/* Appointments Chart */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Agendamentos por Dia</h3>
-          {weeklyLoading ? (
-            <Skeleton className="h-[300px]" />
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={weeklyData || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="appointments" fill="#059669" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+        {weeklyLoading ? (
+          <ModernSkeleton variant="chart" />
+        ) : (
+          <ModernBarChart
+            data={weeklyData || []}
+            dataKey="appointments"
+            title="Agendamentos por Dia"
+            colors={['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']}
+            height={350}
+          />
+        )}
+      </motion.div>
 
       {/* Status Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+      >
         {/* Appointment Status */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Status dos Agendamentos</h3>
-          {statusLoading ? (
-            <Skeleton className="h-[200px]" />
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={statusData || []}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={80}
-                    dataKey="value"
-                  >
-                    {(statusData || []).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="mt-4 space-y-2">
-                {(statusData || []).map((item, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div 
-                        className="w-3 h-3 rounded-full mr-2"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm text-gray-600">{item.name}</span>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">{item.value}%</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {statusLoading ? (
+          <ModernSkeleton variant="chart" height="20rem" />
+        ) : (
+          <ModernPieChart
+            data={statusData || []}
+            dataKey="value"
+            nameKey="name"
+            title="Status dos Agendamentos"
+            colors={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']}
+            height={280}
+            showLegend={true}
+          />
+        )}
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
-          <div className="space-y-3">
-            <button className="w-full flex items-center justify-between p-3 text-left bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <Users className="h-5 w-5 text-blue-600 mr-3" />
-                <span className="text-sm font-medium text-blue-900">Novo Paciente</span>
-              </div>
-            </button>
-            <button className="w-full flex items-center justify-between p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <Calendar className="h-5 w-5 text-green-600 mr-3" />
-                <span className="text-sm font-medium text-green-900">Agendar Consulta</span>
-              </div>
-            </button>
-            <button className="w-full flex items-center justify-between p-3 text-left bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors">
-              <div className="flex items-center">
-                <FileText className="h-5 w-5 text-yellow-600 mr-3" />
-                <span className="text-sm font-medium text-yellow-900">Novo Prontuário</span>
-              </div>
-            </button>
+        <motion.div 
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+        >
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
+              <BarChart3 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Ações Rápidas</h3>
+              <p className="text-sm text-gray-600">Acesso rápido às principais funcionalidades</p>
+            </div>
           </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Clock className="h-5 w-5 text-blue-600" />
+          
+          <div className="space-y-3">
+            <motion.button 
+              whileHover={{ scale: 1.02, x: 4 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center p-4 text-left bg-gradient-to-r from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 rounded-xl transition-all duration-200 border border-blue-200"
+            >
+              <div className="p-2 bg-blue-500 rounded-lg mr-4">
+                <Users className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Atividades Recentes</h3>
-                <p className="text-sm text-gray-500">Últimas ações realizadas</p>
+                <span className="text-sm font-semibold text-blue-900">Novo Paciente</span>
+                <p className="text-xs text-blue-700">Cadastrar novo paciente</p>
               </div>
+            </motion.button>
+            
+            <motion.button 
+              whileHover={{ scale: 1.02, x: 4 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center p-4 text-left bg-gradient-to-r from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 rounded-xl transition-all duration-200 border border-green-200"
+            >
+              <div className="p-2 bg-green-500 rounded-lg mr-4">
+                <Calendar className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-green-900">Agendar Consulta</span>
+                <p className="text-xs text-green-700">Nova consulta</p>
+              </div>
+            </motion.button>
+            
+            <motion.button 
+              whileHover={{ scale: 1.02, x: 4 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center p-4 text-left bg-gradient-to-r from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 rounded-xl transition-all duration-200 border border-orange-200"
+            >
+              <div className="p-2 bg-orange-500 rounded-lg mr-4">
+                <FileText className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-orange-900">Novo Prontuário</span>
+                <p className="text-xs text-orange-700">Criar prontuário</p>
+              </div>
+            </motion.button>
+          </div>
+        </motion.div>
+
+        {/* Recent Activity */}
+        <motion.div 
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6"
+        >
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl">
+              <Activity className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Atividades Recentes</h3>
+              <p className="text-sm text-gray-600">Últimas ações realizadas no sistema</p>
             </div>
           </div>
           
           {activitiesLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-12 w-12 bg-gray-200 rounded-xl"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                </div>
+                <ModernSkeleton key={i} variant="card" />
               ))}
             </div>
           ) : activities && activities.length > 0 ? (
@@ -421,58 +438,66 @@ export default function Dashboard() {
                 }
                 
                 return (
-                  <div 
-                    key={index} 
-                    className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
+                  <motion.div 
+                    key={index}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.7 + index * 0.1 }}
+                    whileHover={{ x: 4, scale: 1.01 }}
+                    className="bg-gradient-to-r from-white to-gray-50 rounded-xl border border-gray-100 p-4 hover:shadow-lg transition-all duration-200 cursor-pointer"
                   >
                     <div className="flex items-start space-x-4">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", styles.bg)}>
-                        <Icon className={cn("h-5 w-5", styles.color)} />
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                        <Icon className="h-5 w-5 text-white" />
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-1">
-                              <h4 className="text-sm font-medium text-gray-900">
+                              <h4 className="text-sm font-semibold text-gray-900">
                                 {activity.title}
                               </h4>
-                              <span className={cn(
-                                "px-2 py-0.5 text-xs font-medium rounded-full",
-                                styles.badge
-                              )}>
-                                {getActivityType()}
-                              </span>
+                              <ModernStatusIndicator 
+                                status={activity.color === 'green' ? 'success' : activity.color === 'red' ? 'error' : 'active'} 
+                                size="sm"
+                                showIcon={false}
+                              />
                             </div>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-gray-600 font-medium">
                               {activity.description}
                             </p>
                           </div>
                         </div>
                         
                         <div className="flex items-center text-xs text-gray-500">
-                          <Clock className="h-3 w-3 mr-1" />
+                          <AnimatedIcon icon={Clock} animation="pulse" className="h-3 w-3 mr-1" />
                           <span>{timeAgo}</span>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 )
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                <Clock className="h-8 w-8 text-gray-400" />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="text-center py-12"
+            >
+              <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-sm">
+                <AnimatedIcon icon={Clock} animation="pulse" className="h-8 w-8 text-gray-400" />
               </div>
-              <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma atividade ainda</h4>
-              <p className="text-sm text-gray-500">
+              <h4 className="text-lg font-bold text-gray-900 mb-2">Nenhuma atividade ainda</h4>
+              <p className="text-sm text-gray-600">
                 Suas atividades recentes aparecerão aqui conforme você utiliza o sistema
               </p>
-            </div>
+            </motion.div>
           )}
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   )
 }

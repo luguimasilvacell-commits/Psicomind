@@ -11,6 +11,11 @@ import {
 } from '../types/chat';
 import { useSocket } from './useSocket';
 import { useAuthStore } from '../stores/authStore';
+import { 
+  initializeMessageWebhookService, 
+  getMessageWebhookService,
+  WebhookStatus 
+} from '../services/messageWebhookService';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -21,10 +26,15 @@ export const useChat = (): UseChatReturn => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [webhookStatuses, setWebhookStatuses] = useState<Map<string, WebhookStatus>>(new Map());
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { token } = useAuthStore();
   const socket = useSocket();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize webhook service
+  useEffect(() => {
+    initializeMessageWebhookService();
+  }, []);
 
   // API helper function
   const apiCall = useCallback(async (endpoint: string, options: RequestInit = {}) => {
@@ -164,6 +174,21 @@ export const useChat = (): UseChatReturn => {
           )
         );
 
+        // Send to Trae AI webhook
+        const webhookService = getMessageWebhookService();
+        if (webhookService) {
+          // Register status callback
+          webhookService.onStatusUpdate(result.data.id, (status: WebhookStatus) => {
+            setWebhookStatuses(prev => new Map(prev.set(result.data!.id, status)));
+          });
+
+          // Send to webhook (async, don't wait)
+          webhookService.sendMessageToWebhook(result.data, selectedConversation)
+            .catch(error => {
+              console.error('Webhook error (non-blocking):', error);
+            });
+        }
+
         // Scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -210,7 +235,7 @@ export const useChat = (): UseChatReturn => {
   useEffect(() => {
     if (!socket.connected) return;
 
-    // Handle new messages
+    // Handle new messages from socket
     const handleNewMessage = (data: { conversationId: string; message: Message }) => {
       const { conversationId, message } = data;
 
@@ -248,6 +273,26 @@ export const useChat = (): UseChatReturn => {
             : conv
         )
       );
+
+      // Send received message to n8n webhook (only for patient messages)
+      if (message.sender_type === 'patient') {
+        const conversation = conversations.find(c => c.id === conversationId) || selectedConversation;
+        if (conversation) {
+          const webhookService = getMessageWebhookService();
+          if (webhookService) {
+            // Register status callback
+            webhookService.onStatusUpdate(message.id, (status: WebhookStatus) => {
+              setWebhookStatuses(prev => new Map(prev.set(message.id, status)));
+            });
+
+            // Send to webhook (async, don't wait)
+            webhookService.sendMessageToWebhook(message, conversation)
+              .catch(error => {
+                console.error('Webhook error for received message (non-blocking):', error);
+              });
+          }
+        }
+      }
     };
 
     // Handle message status updates
@@ -318,6 +363,20 @@ export const useChat = (): UseChatReturn => {
     }
   }, [selectedConversation, markAsRead]);
 
+  // Get webhook status for a message
+  const getWebhookStatus = useCallback((messageId: string): WebhookStatus | null => {
+    return webhookStatuses.get(messageId) || null;
+  }, [webhookStatuses]);
+
+  // Test webhook connection
+  const testWebhook = useCallback(async (): Promise<boolean> => {
+    const webhookService = getMessageWebhookService();
+    if (webhookService) {
+      return await webhookService.testWebhook();
+    }
+    return false;
+  }, []);
+
   return {
     conversations,
     selectedConversation,
@@ -330,6 +389,8 @@ export const useChat = (): UseChatReturn => {
     sendMessage,
     markAsRead,
     refreshConversations,
-    refreshMessages
+    refreshMessages,
+    getWebhookStatus,
+    testWebhook
   };
 };
