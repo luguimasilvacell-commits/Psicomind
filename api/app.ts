@@ -16,7 +16,8 @@ import pacientesRoutes from './routes/pacientes.js'
 import auditRoutes from './routes/audit.js'
 import logRoutes from './routes/logs.js'
 import chatRoutes from './routes/chat.js'
-import webhookRoutes from './routes/webhook.js'
+import whatsappRoutes from './routes/whatsapp.js'
+import templatesRoutes from './routes/templates.js'
 import { requestLoggerMiddleware } from './services/logService.js'
 import { 
   securityHeaders, 
@@ -85,7 +86,8 @@ app.use('/api/pacientes', pacientesRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/logs', logRoutes)
 app.use('/api/chat', chatRoutes)
-app.use('/api/webhook', webhookRoutes)
+app.use('/api/whatsapp', whatsappRoutes)
+app.use('/api/templates', templatesRoutes)
 
 /**
  * health

@@ -3,7 +3,7 @@
  */
 import app from './app.js';
 import { createServer } from 'http';
-import { initializeWebSocket } from './services/websocket.js';
+import { socketService } from './services/socketService.js';
 
 /**
  * start server with port
@@ -14,11 +14,11 @@ const PORT = process.env.PORT || 3001;
 const server = createServer(app);
 
 // Inicializar WebSocket
-initializeWebSocket(server);
+socketService.initialize(server);
 
 server.listen(PORT, () => {
   console.log(`Server ready on port ${PORT}`);
-  console.log(`WebSocket server ready on port ${PORT}`);
+  console.log(`WebSocket server initialized`);
 });
 
 /**

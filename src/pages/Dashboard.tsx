@@ -54,9 +54,8 @@ export default function Dashboard() {
       title: 'Total de Pacientes',
       value: currentStats.totalPacientes,
       icon: Users,
-      gradient: 'from-blue-500 to-blue-600',
-      ring: 'ring-blue-100',
-      badge: 'bg-blue-100 text-blue-800',
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-600',
       change: '+12%',
       changeType: 'positive',
       description: 'Novos pacientes este mês'
@@ -65,9 +64,8 @@ export default function Dashboard() {
       title: 'Agendamentos Hoje',
       value: currentStats.agendamentosHoje,
       icon: Calendar,
-      gradient: 'from-green-500 to-emerald-600',
-      ring: 'ring-green-100',
-      badge: 'bg-green-100 text-green-800',
+      iconBg: 'bg-green-100',
+      iconColor: 'text-green-600',
       change: '+8%',
       changeType: 'positive',
       description: 'Consultas agendadas'
@@ -76,9 +74,8 @@ export default function Dashboard() {
       title: 'Receita Mensal',
       value: `R$ ${currentStats.receitaMensal.toFixed(2)}`,
       icon: DollarSign,
-      gradient: 'from-purple-500 to-purple-600',
-      ring: 'ring-purple-100',
-      badge: 'bg-purple-100 text-purple-800',
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-600',
       change: '+15%',
       changeType: 'positive',
       description: 'Faturamento do mês'
@@ -87,9 +84,8 @@ export default function Dashboard() {
       title: 'Prontuários Pendentes',
       value: currentStats.prontuariosPendentes,
       icon: FileText,
-      gradient: 'from-orange-500 to-orange-600',
-      ring: 'ring-orange-100',
-      badge: 'bg-orange-100 text-orange-800',
+      iconBg: 'bg-orange-100',
+      iconColor: 'text-orange-600',
       change: '-5%',
       changeType: 'negative',
       description: 'Aguardando preenchimento'
@@ -176,43 +172,21 @@ export default function Dashboard() {
           return (
             <div 
               key={index} 
-              className="group relative bg-gradient-to-br from-white via-gray-50 to-blue-50/30 rounded-xl shadow-lg border border-gray-200/60 p-6 backdrop-blur-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+              className="bg-white p-6 rounded-lg shadow-sm border border-gray-200"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h3 className="text-sm font-semibold text-gray-600 group-hover:text-gray-500 transition-colors">
-                      {stat.title}
-                    </h3>
-                    <span className={cn(
-                      "px-2 py-0.5 text-xs font-medium rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300",
-                      stat.badge
-                    )}>
-                      Métrica
-                    </span>
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", stat.iconBg)}>
+                    <stat.icon className={cn("h-5 w-5", stat.iconColor)} />
                   </div>
-                  <p className="text-3xl font-bold text-gray-900 group-hover:text-gray-700 transition-colors mb-2">
-                    {stat.value}
-                  </p>
-                  <p className="text-xs text-gray-500 group-hover:text-gray-400 transition-colors">
-                    {stat.description}
-                  </p>
                 </div>
-                
-                <div className={cn(
-                  "relative p-3 rounded-xl shadow-md ring-4 transition-all duration-300 group-hover:scale-110 bg-gradient-to-r",
-                  stat.gradient,
-                  stat.ring
-                )}>
-                  <stat.icon className="h-6 w-6 text-white" />
-                  <div className="absolute -top-1 -right-1 h-3 w-3 bg-white rounded-full flex items-center justify-center">
-                    <div className="h-1.5 w-1.5 bg-green-400 rounded-full animate-pulse"></div>
-                  </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">{stat.title}</p>
+                  <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
                 </div>
               </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+              <div className="mt-4">
+                <div className="flex items-center">
                   <div className={cn(
                     "flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium",
                     stat.changeType === 'positive' 
@@ -222,22 +196,10 @@ export default function Dashboard() {
                     <TrendIcon className="h-3 w-3" />
                     <span>{stat.change}</span>
                   </div>
-                  <span className="text-xs text-gray-500">vs mês anterior</span>
+                  <span className="ml-2 text-xs text-gray-500">vs mês anterior</span>
                 </div>
-                
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <div className={cn(
-                    "h-1 w-8 rounded-full bg-gradient-to-r",
-                    stat.gradient
-                  )}></div>
-                </div>
+                <p className="mt-2 text-xs text-gray-500">{stat.description}</p>
               </div>
-              
-              {/* Hover effect overlay */}
-              <div className={cn(
-                "absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-r",
-                stat.gradient.replace('from-', 'from-').replace('to-', 'to-') + '/5'
-              )}></div>
             </div>
           )
         })}
@@ -358,18 +320,17 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-gradient-to-br from-white via-gray-50 to-blue-50/30 rounded-xl shadow-lg border border-gray-200/60 p-6 backdrop-blur-sm">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-md">
-                <Clock className="h-5 w-5 text-white" />
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Atividades Recentes</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Atividades Recentes</h3>
                 <p className="text-sm text-gray-500">Últimas ações realizadas</p>
               </div>
             </div>
-            <div className="h-2 w-2 bg-green-400 rounded-full animate-pulse"></div>
           </div>
           
           {activitiesLoading ? (
@@ -406,32 +367,32 @@ export default function Dashboard() {
                   switch (activity.color) {
                     case 'blue':
                       return {
-                        bg: 'bg-gradient-to-r from-blue-500 to-blue-600',
-                        ring: 'ring-blue-100',
+                        bg: 'bg-blue-100',
+                        color: 'text-blue-600',
                         badge: 'bg-blue-100 text-blue-800'
                       }
                     case 'green':
                       return {
-                        bg: 'bg-gradient-to-r from-green-500 to-emerald-600',
-                        ring: 'ring-green-100',
+                        bg: 'bg-green-100',
+                        color: 'text-green-600',
                         badge: 'bg-green-100 text-green-800'
                       }
                     case 'red':
                       return {
-                        bg: 'bg-gradient-to-r from-red-500 to-rose-600',
-                        ring: 'ring-red-100',
+                        bg: 'bg-red-100',
+                        color: 'text-red-600',
                         badge: 'bg-red-100 text-red-800'
                       }
                     case 'yellow':
                       return {
-                        bg: 'bg-gradient-to-r from-yellow-500 to-orange-500',
-                        ring: 'ring-yellow-100',
+                        bg: 'bg-yellow-100',
+                        color: 'text-yellow-600',
                         badge: 'bg-yellow-100 text-yellow-800'
                       }
                     default:
                       return {
-                        bg: 'bg-gradient-to-r from-gray-500 to-gray-600',
-                        ring: 'ring-gray-100',
+                        bg: 'bg-gray-100',
+                        color: 'text-gray-600',
                         badge: 'bg-gray-100 text-gray-800'
                       }
                   }
@@ -462,25 +423,18 @@ export default function Dashboard() {
                 return (
                   <div 
                     key={index} 
-                    className="group relative bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50 hover:border-gray-300/70 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                    className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
                   >
                     <div className="flex items-start space-x-4">
-                      <div className={cn(
-                        "relative p-3 rounded-xl shadow-md ring-4 transition-all duration-300 group-hover:scale-110",
-                        styles.bg,
-                        styles.ring
-                      )}>
-                        <Icon className="h-5 w-5 text-white" />
-                        <div className="absolute -top-1 -right-1 h-3 w-3 bg-white rounded-full flex items-center justify-center">
-                          <div className="h-1.5 w-1.5 bg-green-400 rounded-full"></div>
-                        </div>
+                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", styles.bg)}>
+                        <Icon className={cn("h-5 w-5", styles.color)} />
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-1">
-                              <h4 className="text-sm font-semibold text-gray-900 group-hover:text-gray-700 transition-colors">
+                              <h4 className="text-sm font-medium text-gray-900">
                                 {activity.title}
                               </h4>
                               <span className={cn(
@@ -490,49 +444,31 @@ export default function Dashboard() {
                                 {getActivityType()}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600 group-hover:text-gray-500 transition-colors leading-relaxed">
+                            <p className="text-sm text-gray-600">
                               {activity.description}
                             </p>
                           </div>
                         </div>
                         
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2 text-xs text-gray-500">
-                            <Clock className="h-3 w-3" />
-                            <span className="font-medium">{timeAgo}</span>
-                          </div>
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <div className="h-1 w-8 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full"></div>
-                          </div>
+                        <div className="flex items-center text-xs text-gray-500">
+                          <Clock className="h-3 w-3 mr-1" />
+                          <span>{timeAgo}</span>
                         </div>
                       </div>
                     </div>
-                    
-                    {/* Hover effect overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
                   </div>
                 )
               })}
             </div>
           ) : (
             <div className="text-center py-12">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-purple-500/20 rounded-full blur-xl"></div>
-                <div className="relative bg-gradient-to-r from-gray-100 to-gray-200 p-6 rounded-full mx-auto w-24 h-24 flex items-center justify-center mb-6">
-                  <Clock className="h-10 w-10 text-gray-400" />
-                </div>
+              <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <Clock className="h-8 w-8 text-gray-400" />
               </div>
-              <h4 className="text-lg font-semibold text-gray-700 mb-2">Nenhuma atividade ainda</h4>
-              <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
+              <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma atividade ainda</h4>
+              <p className="text-sm text-gray-500">
                 Suas atividades recentes aparecerão aqui conforme você utiliza o sistema
               </p>
-              <div className="mt-6 flex justify-center">
-                <div className="flex space-x-1">
-                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></div>
-                  <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="h-2 w-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
             </div>
           )}
         </div>

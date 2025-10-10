@@ -1,352 +1,337 @@
 /**
- * Tipos TypeScript para o Sistema de Chat WhatsApp
- * Baseado na arquitetura técnica definida na documentação
+ * Tipos TypeScript para o sistema de chat WhatsApp Web
  */
 
-// Tipos básicos para entidades do chat
-export interface Conversa {
+// Tipos básicos
+export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video';
+export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+export type SenderType = 'patient' | 'psychologist';
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'qr' | 'connected' | 'error';
+
+// Interface para Paciente (simplificada para o chat)
+export interface ChatPatient {
   id: string;
-  psicologo_id: string;
-  paciente_id: string;
-  ultima_mensagem: string;
-  ativa: boolean;
-  mensagens_nao_lidas: number;
-  created_at: string;
-  updated_at: string;
-  
-  // Dados relacionados (joins)
-  paciente?: {
-    id: string;
-    nome: string;
-    telefone: string;
-    email?: string;
-  };
-  preview_mensagem?: string;
+  nome: string;
+  telefone: string;
+  email?: string;
 }
 
-export interface Mensagem {
+// Interface para Mensagem
+export interface Message {
   id: string;
-  conversa_id: string;
-  conteudo: string;
-  tipo: 'texto' | 'imagem' | 'audio' | 'documento';
-  direcao: 'enviada' | 'recebida';
-  status_entrega: 'enviando' | 'entregue' | 'lida' | 'erro';
-  metadata: Record<string, any>;
-  created_at: string;
+  conversation_id: string;
+  content: string;
+  message_type: MessageType;
+  sender_type: SenderType;
   whatsapp_message_id?: string;
-  reply_to_message_id?: string;
-  
-  // Dados relacionados
-  reply_to_message?: Mensagem;
+  media_url?: string;
+  media_type?: string;
+  status: MessageStatus;
+  timestamp: string;
+  created_at: string;
 }
 
-export interface ConfiguracaoWhatsApp {
+// Interface para Conversa
+export interface Conversation {
   id: string;
-  psicologo_id: string;
-  evolution_api_url: string;
-  evolution_api_key: string;
-  instance_name: string;
-  numero_whatsapp?: string;
-  ativo: boolean;
-  webhook_url?: string;
+  patient_id: string;
+  psychologist_id: string;
+  whatsapp_chat_id: string;
+  last_message_at: string | null;
+  unread_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  patient?: ChatPatient;
+  last_message?: {
+    content: string;
+    message_type: MessageType;
+    sender_type: SenderType;
+    timestamp: string;
+  };
+}
+
+// Interface para Template de Mensagem
+export interface MessageTemplate {
+  id: string;
+  psychologist_id: string;
+  name: string;
+  content: string;
+  category: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface ChatAuditLog {
+// Interface para Configuração do WhatsApp
+export interface WhatsAppConfig {
   id: string;
-  psicologo_id?: string;
-  paciente_id?: string;
-  action_type: 'message_sent' | 'message_received' | 'message_read' | 'conversation_accessed' | 'data_exported' | 'config_changed';
-  resource_type: 'message' | 'conversation' | 'configuration' | 'export';
-  resource_id?: string;
-  details: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
+  psychologist_id: string;
+  auto_reply_enabled: boolean;
+  auto_reply_message?: string;
+  business_hours_enabled: boolean;
+  business_hours_start?: string;
+  business_hours_end?: string;
+  away_message?: string;
+  webhook_url?: string;
+  is_connected: boolean;
+  last_connection: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para Estatísticas de Conversa
+export interface ConversationStats {
+  total_conversations: number;
+  active_conversations: number;
+  total_messages: number;
+  unread_messages: number;
+  last_activity: string | null;
+}
+
+// Tipos para WebSocket
+export interface SocketMessage {
+  type: 'new_message' | 'message_status_update' | 'typing_indicator' | 'connection_status' | 'qr_code';
+  data: any;
+  conversationId?: string;
   timestamp: string;
 }
 
-export interface ChatConsentRecord {
-  id: string;
-  paciente_id: string;
-  consent_type: 'whatsapp_communication' | 'data_processing' | 'data_retention' | 'data_sharing';
-  consent_text: string;
-  granted_at: string;
-  ip_address?: string;
-  evidence: Record<string, any>;
+export interface TypingIndicator {
+  conversationId: string;
+  isTyping: boolean;
+  userId: string;
 }
 
-// Tipos para API requests/responses
-export interface ListarConversasRequest {
-  limit?: number;
-  offset?: number;
-  search?: string;
+// Props para componentes
+export interface ChatMainProps {
+  className?: string;
 }
 
-export interface ListarConversasResponse {
-  conversas: Conversa[];
-  total: number;
-  hasMore: boolean;
-}
-
-export interface BuscarMensagensRequest {
-  pacienteId: string;
-  limit?: number;
-  before?: string;
-}
-
-export interface BuscarMensagensResponse {
-  mensagens: Mensagem[];
-  hasMore: boolean;
-}
-
-export interface EnviarMensagemRequest {
-  pacienteId: string;
-  conteudo: string;
-  tipo?: 'texto' | 'imagem' | 'audio' | 'documento';
-  replyToMessageId?: string;
-}
-
-export interface EnviarMensagemResponse {
-  mensagemId: string;
-  status: string;
-  timestamp: string;
-}
-
-export interface ConfigurarEvolutionAPIRequest {
-  apiUrl: string;
-  apiKey: string;
-  instanceName: string;
-  numeroWhatsapp?: string;
-}
-
-// Tipos para WebSocket events
-export interface WebSocketEvents {
-  // Eventos do cliente para servidor
-  join_chat: { conversaId: string };
-  leave_chat: { conversaId: string };
-  typing_start: { conversaId: string };
-  typing_stop: { conversaId: string };
-  
-  // Eventos do servidor para cliente
-  new_message: { mensagem: Mensagem };
-  message_status: { mensagemId: string; status: string };
-  user_typing: { conversaId: string; isTyping: boolean };
-  conversation_updated: { conversa: Conversa };
-}
-
-// Tipos para Evolution API
-export interface EvolutionAPIMessage {
-  key: {
-    remoteJid: string;
-    fromMe: boolean;
-    id: string;
-  };
-  message: {
-    conversation?: string;
-    imageMessage?: {
-      url: string;
-      mimetype: string;
-      caption?: string;
-    };
-    audioMessage?: {
-      url: string;
-      mimetype: string;
-    };
-    documentMessage?: {
-      url: string;
-      mimetype: string;
-      title: string;
-    };
-  };
-  messageTimestamp: number;
-  status: string;
-}
-
-export interface EvolutionAPIWebhookPayload {
-  event: 'message' | 'status';
-  instance: string;
-  data: EvolutionAPIMessage;
-}
-
-export interface EvolutionAPIConfig {
-  apiUrl: string;
-  apiKey: string;
-  instanceName: string;
-  webhookSecret: string;
-  allowedIPs: string[];
-  rateLimiting: {
-    maxRequests: number;
-    windowMs: number;
-  };
-}
-
-// Tipos para componentes React
-export interface ChatListProps {
-  conversas: Conversa[];
-  onSelectConversa: (conversa: Conversa) => void;
-  selectedConversaId?: string;
+export interface ConversationListProps {
+  conversations: Conversation[];
+  selectedConversationId?: string;
+  onSelectConversation: (conversation: Conversation) => void;
+  onSearchChange: (search: string) => void;
+  searchTerm: string;
   loading?: boolean;
-  onLoadMore?: () => void;
-  hasMore?: boolean;
 }
 
-export interface ChatWindowProps {
-  conversa: Conversa;
-  mensagens: Mensagem[];
-  onSendMessage: (conteudo: string) => void;
+export interface MessageAreaProps {
+  conversation: Conversation | null;
+  messages: Message[];
+  onSendMessage: (content: string, type?: MessageType, file?: File) => void;
+  onMarkAsRead: () => void;
   loading?: boolean;
-  onLoadMore?: () => void;
-  hasMore?: boolean;
+  typing?: boolean;
 }
 
 export interface MessageBubbleProps {
-  mensagem: Mensagem;
+  message: Message;
   isOwn: boolean;
+  showAvatar?: boolean;
   showTimestamp?: boolean;
-  onReply?: (mensagem: Mensagem) => void;
 }
 
-export interface ChatInputProps {
-  onSendMessage: (conteudo: string) => void;
+export interface MessageInputProps {
+  onSendMessage: (content: string, type?: MessageType, file?: File) => void;
   disabled?: boolean;
   placeholder?: string;
-  replyToMessage?: Mensagem;
-  onCancelReply?: () => void;
+  onTyping?: (isTyping: boolean) => void;
 }
 
-export interface PatientInfoPanelProps {
-  paciente: {
-    id: string;
-    nome: string;
-    telefone: string;
-    email?: string;
-  };
-  proximosAgendamentos?: Array<{
-    id: string;
-    data_hora: string;
-    tipo: string;
-    status: string;
-  }>;
+export interface WhatsAppConnectionProps {
+  status: ConnectionStatus;
+  qrCode?: string;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onRestart: () => void;
+  loading?: boolean;
+}
+
+export interface TemplateManagerProps {
+  templates: MessageTemplate[];
+  onCreateTemplate: (template: Omit<MessageTemplate, 'id' | 'psychologist_id' | 'created_at' | 'updated_at'>) => void;
+  onUpdateTemplate: (id: string, updates: Partial<MessageTemplate>) => void;
+  onDeleteTemplate: (id: string) => void;
+  onUseTemplate: (template: MessageTemplate) => void;
+  loading?: boolean;
+}
+
+export interface TemplateFormProps {
+  template?: MessageTemplate;
+  onSubmit: (template: Omit<MessageTemplate, 'id' | 'psychologist_id' | 'created_at' | 'updated_at'>) => void;
+  onCancel: () => void;
+  loading?: boolean;
 }
 
 // Tipos para hooks
 export interface UseChatReturn {
-  conversas: Conversa[];
-  selectedConversa: Conversa | null;
-  mensagens: Mensagem[];
+  conversations: Conversation[];
+  selectedConversation: Conversation | null;
+  messages: Message[];
   loading: boolean;
   error: string | null;
-  
-  // Actions
-  selectConversa: (conversa: Conversa) => void;
-  sendMessage: (conteudo: string) => Promise<void>;
-  loadMoreMessages: () => Promise<void>;
-  markAsRead: (conversaId: string) => Promise<void>;
-  searchConversations: (term: string) => Promise<void>;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  selectConversation: (conversation: Conversation) => void;
+  sendMessage: (content: string, type?: MessageType, file?: File) => Promise<void>;
+  markAsRead: () => Promise<void>;
+  refreshConversations: () => Promise<void>;
+  refreshMessages: () => Promise<void>;
 }
 
-export interface UseWebSocketReturn {
+export interface UseWhatsAppReturn {
+  status: ConnectionStatus;
+  qrCode: string | null;
+  config: WhatsAppConfig | null;
+  loading: boolean;
+  error: string | null;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  restart: () => Promise<void>;
+  updateConfig: (updates: Partial<WhatsAppConfig>) => Promise<void>;
+  refreshStatus: () => Promise<void>;
+}
+
+export interface UseTemplatesReturn {
+  templates: MessageTemplate[];
+  categories: string[];
+  loading: boolean;
+  error: string | null;
+  createTemplate: (template: Omit<MessageTemplate, 'id' | 'psychologist_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateTemplate: (id: string, updates: Partial<MessageTemplate>) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
+  duplicateTemplate: (id: string, name?: string) => Promise<void>;
+  refreshTemplates: () => Promise<void>;
+}
+
+export interface UseSocketReturn {
   connected: boolean;
-  joinChat: (conversaId: string) => void;
-  leaveChat: (conversaId: string) => void;
-  startTyping: (conversaId: string) => void;
-  stopTyping: (conversaId: string) => void;
-}
-
-export interface UseEvolutionAPIReturn {
-  config: ConfiguracaoWhatsApp | null;
-  loading: boolean;
   error: string | null;
-  
-  // Actions
-  updateConfig: (config: ConfigurarEvolutionAPIRequest) => Promise<void>;
-  testConnection: () => Promise<boolean>;
-  getInstanceStatus: () => Promise<string>;
+  emit: (event: string, data: any) => void;
+  on: (event: string, callback: (data: any) => void) => void;
+  off: (event: string, callback?: (data: any) => void) => void;
+  connect: () => void;
+  disconnect: () => void;
 }
 
-// Tipos para estatísticas
-export interface ChatStats {
-  total_conversas: number;
-  conversas_ativas: number;
-  total_mensagens: number;
-  mensagens_nao_lidas: number;
-  ultima_atividade: string | null;
+// Tipos para API responses
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
 }
 
-export interface SecurityMetrics {
-  hour: string;
-  action_type: string;
-  action_count: number;
-  unique_users: number;
-  unique_ips: number;
+export interface PaginatedResponse<T = any> {
+  success: boolean;
+  data: T[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+// Tipos para formulários
+export interface SendMessageForm {
+  content: string;
+  type: MessageType;
+  file?: File;
+}
+
+export interface TemplateForm {
+  name: string;
+  content: string;
+  category: string;
+  is_active: boolean;
+}
+
+export interface WhatsAppConfigForm {
+  auto_reply_enabled: boolean;
+  auto_reply_message: string;
+  business_hours_enabled: boolean;
+  business_hours_start: string;
+  business_hours_end: string;
+  away_message: string;
+  webhook_url: string;
 }
 
 // Tipos para filtros e busca
-export interface ChatFilters {
+export interface ConversationFilters {
   search?: string;
-  status?: 'ativa' | 'inativa';
-  dateRange?: {
-    start: string;
-    end: string;
-  };
-  pacienteId?: string;
+  status?: 'active' | 'inactive' | 'all';
+  dateFrom?: string;
+  dateTo?: string;
+  hasUnread?: boolean;
 }
 
-export interface ConversationSearchResult {
-  conversa_id: string;
-  paciente_id: string;
-  paciente_nome: string;
-  paciente_telefone: string;
-  ultima_mensagem: string;
-  mensagens_nao_lidas: number;
-  ativa: boolean;
-  preview_mensagem: string;
+export interface MessageFilters {
+  type?: MessageType;
+  sender?: SenderType;
+  status?: MessageStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Tipos para exportação
+export interface ExportOptions {
+  format: 'json' | 'csv';
+  includeMedia: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface ExportData {
+  conversation: {
+    id: string;
+    patient_name: string;
+    patient_phone: string;
+    created_at: string;
+    exported_at: string;
+  };
+  messages: Message[];
 }
 
 // Tipos para notificações
 export interface ChatNotification {
   id: string;
-  type: 'new_message' | 'connection_status' | 'error';
+  type: 'new_message' | 'connection_lost' | 'connection_restored' | 'error';
   title: string;
   message: string;
-  conversaId?: string;
+  conversationId?: string;
   timestamp: string;
   read: boolean;
 }
 
-// Tipos para configurações de segurança
-export interface SecurityConfig {
-  requireMFA: boolean;
-  mfaMethods: ('sms' | 'email' | 'authenticator')[];
-  sessionTimeout: number;
-  maxFailedAttempts: number;
-  encryptionEnabled: boolean;
-  auditLogRetention: number; // dias
+// Tipos para métricas e analytics
+export interface ChatMetrics {
+  daily_messages: number;
+  weekly_messages: number;
+  monthly_messages: number;
+  response_time_avg: number;
+  active_conversations: number;
+  patient_satisfaction?: number;
 }
 
-// Tipos para exportação de dados
-export interface ExportRequest {
-  pacienteId?: string;
-  dateRange: {
-    start: string;
-    end: string;
-  };
-  format: 'json' | 'csv' | 'pdf';
-  includeMetadata: boolean;
-}
+// Constantes
+export const MESSAGE_TYPES: MessageType[] = ['text', 'image', 'document', 'audio', 'video'];
+export const MESSAGE_STATUSES: MessageStatus[] = ['sent', 'delivered', 'read', 'failed'];
+export const CONNECTION_STATUSES: ConnectionStatus[] = ['disconnected', 'connecting', 'qr', 'connected', 'error'];
 
-export interface ExportedData {
-  conversas: Conversa[];
-  mensagens: Mensagem[];
-  metadata: {
-    exportedAt: string;
-    exportedBy: string;
-    totalConversas: number;
-    totalMensagens: number;
-    dateRange: {
-      start: string;
-      end: string;
-    };
-  };
-}
+export const DEFAULT_TEMPLATE_CATEGORIES = [
+  'Saudação',
+  'Agendamento',
+  'Confirmação',
+  'Cancelamento',
+  'Reagendamento',
+  'Lembrete',
+  'Informações',
+  'Despedida',
+  'Emergência',
+  'Outros'
+] as const;
+
+export type TemplateCategory = typeof DEFAULT_TEMPLATE_CATEGORIES[number];

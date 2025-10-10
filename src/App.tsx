@@ -25,8 +25,15 @@ const Prontuarios = React.lazy(() => import('./pages/Prontuarios'))
 const Financeiro = React.lazy(() => import('./pages/Financeiro'))
 const SystemLogs = React.lazy(() => import('./pages/SystemLogs'))
 const Relatorios = React.lazy(() => import('./pages/Relatorios'))
+
+// Chat pages
 const Chat = React.lazy(() => import('./pages/Chat'))
-const ConfiguracaoWhatsApp = React.lazy(() => import('./pages/ConfiguracaoWhatsApp'))
+const MessageTemplates = React.lazy(() => import('./pages/MessageTemplates'))
+
+// WhatsApp pages
+const WhatsAppConfig = React.lazy(() => import('./pages/WhatsAppConfig'))
+const WhatsAppChat = React.lazy(() => import('./pages/WhatsAppChat'))
+const WhatsAppTemplates = React.lazy(() => import('./pages/WhatsAppTemplates'))
 
 // Placeholder for configurations (not implemented yet)
 const Configuracoes = React.lazy(() => 
@@ -98,9 +105,24 @@ export default function App() {
                 <Chat />
               </PageLoader>
             } />
-            <Route path="chat/configuracao" element={
+            <Route path="message-templates" element={
               <PageLoader>
-                <ConfiguracaoWhatsApp />
+                <MessageTemplates />
+              </PageLoader>
+            } />
+            <Route path="whatsapp-config" element={
+              <PageLoader>
+                <WhatsAppConfig />
+              </PageLoader>
+            } />
+            <Route path="whatsapp-chat" element={
+              <PageLoader>
+                <WhatsAppChat />
+              </PageLoader>
+            } />
+            <Route path="whatsapp-templates" element={
+              <PageLoader>
+                <WhatsAppTemplates />
               </PageLoader>
             } />
             <Route path="configuracoes" element={

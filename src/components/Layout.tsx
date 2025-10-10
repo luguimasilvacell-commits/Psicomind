@@ -12,7 +12,10 @@ import {
   Menu,
   X,
   ScrollText,
-  MessageCircle
+  MessageCircle,
+  MessageSquare,
+  Smartphone,
+  Zap
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { cn } from '../lib/utils'
@@ -24,10 +27,17 @@ const navigation = [
   { name: 'Agendamentos', href: '/agendamentos', icon: Calendar },
   { name: 'Prontuários', href: '/prontuarios', icon: FileText },
   { name: 'Chat WhatsApp', href: '/chat', icon: MessageCircle },
+  { name: 'Templates', href: '/message-templates', icon: MessageSquare },
   { name: 'Financeiro', href: '/financeiro', icon: DollarSign },
   { name: 'Logs Sistema', href: '/system-logs', icon: ScrollText },
   { name: 'Relatórios', href: '/relatorios', icon: BarChart3 },
   { name: 'Configurações', href: '/configuracoes', icon: Settings },
+]
+
+const whatsappNavigation = [
+  { name: 'Configuração WhatsApp', href: '/whatsapp-config', icon: Smartphone },
+  { name: 'Chat WhatsApp', href: '/whatsapp-chat', icon: MessageCircle },
+  { name: 'Templates WhatsApp', href: '/whatsapp-templates', icon: MessageSquare },
 ]
 
 export default function Layout() {
@@ -82,6 +92,40 @@ export default function Layout() {
                 </Link>
               )
             })}
+            
+            {/* WhatsApp Section */}
+            <div className="pt-4">
+              <div className="flex items-center px-2 py-2">
+                <Zap className="mr-3 h-4 w-4 text-green-500" />
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  WhatsApp Web
+                </span>
+              </div>
+              {whatsappNavigation.map((item) => {
+                const isActive = location.pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      "group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors",
+                      isActive
+                        ? "bg-green-100 text-green-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "mr-3 h-5 w-5 flex-shrink-0",
+                        isActive ? "text-green-500" : "text-gray-400 group-hover:text-gray-500"
+                      )}
+                    />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
           </nav>
         </div>
       </div>
@@ -116,6 +160,39 @@ export default function Layout() {
                 </Link>
               )
             })}
+            
+            {/* WhatsApp Section */}
+            <div className="pt-4">
+              <div className="flex items-center px-2 py-2">
+                <Zap className="mr-3 h-4 w-4 text-green-500" />
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  WhatsApp Web
+                </span>
+              </div>
+              {whatsappNavigation.map((item) => {
+                const isActive = location.pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={cn(
+                      "group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors",
+                      isActive
+                        ? "bg-green-100 text-green-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "mr-3 h-5 w-5 flex-shrink-0",
+                        isActive ? "text-green-500" : "text-gray-400 group-hover:text-gray-500"
+                      )}
+                    />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
           </nav>
           
           {/* User info and logout */}
