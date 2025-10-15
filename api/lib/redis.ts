@@ -11,14 +11,17 @@ const redisConfig = {
   maxRetriesPerRequest: null,
 }
 
-// Cliente Redis principal
-export const redis = new Redis(redisConfig)
+// Verificar se Redis está habilitado
+const REDIS_ENABLED = process.env.REDIS_ENABLED !== 'false'
 
-// Cliente Redis para Bull (filas)
-export const redisForBull = new Redis(redisConfig)
+// Cliente Redis principal (opcional)
+export const redis = REDIS_ENABLED ? new Redis(redisConfig) : null
 
-// Configuração das filas
-export const messageQueue = new Queue('message processing', {
+// Cliente Redis para Bull (filas) (opcional)
+export const redisForBull = REDIS_ENABLED ? new Redis(redisConfig) : null
+
+// Configuração das filas (opcionais)
+export const messageQueue = REDIS_ENABLED ? new Queue('message processing', {
   redis: redisConfig,
   defaultJobOptions: {
     removeOnComplete: 100,
@@ -29,9 +32,9 @@ export const messageQueue = new Queue('message processing', {
       delay: 2000,
     },
   },
-})
+}) : null
 
-export const webhookQueue = new Queue('webhook processing', {
+export const webhookQueue = REDIS_ENABLED ? new Queue('webhook processing', {
   redis: redisConfig,
   defaultJobOptions: {
     removeOnComplete: 50,
@@ -42,9 +45,9 @@ export const webhookQueue = new Queue('webhook processing', {
       delay: 1000,
     },
   },
-})
+}) : null
 
-export const automationQueue = new Queue('automation processing', {
+export const automationQueue = REDIS_ENABLED ? new Queue('automation processing', {
   redis: redisConfig,
   defaultJobOptions: {
     removeOnComplete: 100,
@@ -55,7 +58,7 @@ export const automationQueue = new Queue('automation processing', {
       delay: 3000,
     },
   },
-})
+}) : null
 
 // Tipos para jobs
 export interface MessageJob {
@@ -82,33 +85,44 @@ export interface AutomationJob {
   psicologoId: string
 }
 
-// Eventos de monitoramento
-messageQueue.on('completed', (job) => {
-  console.log(`✅ Message job ${job.id} completed`)
-})
+// Event listeners para as filas (apenas se Redis estiver habilitado)
+if (REDIS_ENABLED && messageQueue) {
+  messageQueue.on('completed', (job) => {
+    console.log(`✅ Message job ${job.id} completed`)
+  })
 
-messageQueue.on('failed', (job, err) => {
-  console.error(`❌ Message job ${job.id} failed:`, err.message)
-})
+  messageQueue.on('failed', (job, err) => {
+    console.error(`❌ Message job ${job.id} failed:`, err)
+  })
+}
 
-webhookQueue.on('completed', (job) => {
-  console.log(`✅ Webhook job ${job.id} completed`)
-})
+if (REDIS_ENABLED && webhookQueue) {
+  webhookQueue.on('completed', (job) => {
+    console.log(`✅ Webhook job ${job.id} completed`)
+  })
 
-webhookQueue.on('failed', (job, err) => {
-  console.error(`❌ Webhook job ${job.id} failed:`, err.message)
-})
+  webhookQueue.on('failed', (job, err) => {
+    console.error(`❌ Webhook job ${job.id} failed:`, err)
+  })
+}
 
-automationQueue.on('completed', (job) => {
-  console.log(`✅ Automation job ${job.id} completed`)
-})
+if (REDIS_ENABLED && automationQueue) {
+  automationQueue.on('completed', (job) => {
+    console.log(`✅ Automation job ${job.id} completed`)
+  })
 
-automationQueue.on('failed', (job, err) => {
-  console.error(`❌ Automation job ${job.id} failed:`, err.message)
-})
+  automationQueue.on('failed', (job, err) => {
+    console.error(`❌ Automation job ${job.id} failed:`, err)
+  })
+}
 
 // Função para verificar conexão Redis
 export const checkRedisConnection = async (): Promise<boolean> => {
+  if (!REDIS_ENABLED || !redis) {
+    console.log('⚠️ Redis is disabled - running without Redis support')
+    return false
+  }
+  
   try {
     await redis.ping()
     console.log('✅ Redis connected successfully')
@@ -121,8 +135,13 @@ export const checkRedisConnection = async (): Promise<boolean> => {
 
 // Função para limpar filas (útil para desenvolvimento)
 export const clearQueues = async () => {
-  await messageQueue.empty()
-  await webhookQueue.empty()
-  await automationQueue.empty()
+  if (!REDIS_ENABLED) {
+    console.log('⚠️ Redis is disabled - no queues to clear')
+    return
+  }
+  
+  if (messageQueue) await messageQueue.empty()
+  if (webhookQueue) await webhookQueue.empty()
+  if (automationQueue) await automationQueue.empty()
   console.log('🧹 All queues cleared')
 }

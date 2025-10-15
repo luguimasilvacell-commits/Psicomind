@@ -25,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
         paciente:pacientes(nome, telefone),
         _count_messages:messages(count)
       `)
-      .eq('psicologo_id', psicologoId)
+      .eq('psychologist_id', psicologoId)
       .order('last_message_at', { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1)
 

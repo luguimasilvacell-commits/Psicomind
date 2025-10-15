@@ -8,7 +8,8 @@ import { websocketService } from './websocketService.js'
 /**
  * Processador de mensagens
  */
-messageQueue.process('send-message', async (job: Job<MessageJob>) => {
+if (messageQueue) {
+  messageQueue.process('send-message', async (job: Job<MessageJob>) => {
   const { conversationId, messageId, content, direction, phoneNumber, psicologoId } = job.data
 
   try {
@@ -64,12 +65,14 @@ messageQueue.process('send-message', async (job: Job<MessageJob>) => {
 
     throw error
   }
-})
+  })
+}
 
 /**
  * Processador de webhooks
  */
-webhookQueue.process('process-webhook', async (job: Job<WebhookJob>) => {
+if (webhookQueue) {
+  webhookQueue.process('process-webhook', async (job: Job<WebhookJob>) => {
   const { source, eventType, payload, psicologoId } = job.data
 
   try {
@@ -118,12 +121,14 @@ webhookQueue.process('process-webhook', async (job: Job<WebhookJob>) => {
 
     throw error
   }
-})
+  })
+}
 
 /**
  * Processador de automações
  */
-automationQueue.process('process-automation', async (job: Job<AutomationJob>) => {
+if (automationQueue) {
+  automationQueue.process('process-automation', async (job: Job<AutomationJob>) => {
   const { automationId, conversationId, messageId, triggerData, psicologoId } = job.data
 
   try {
@@ -214,7 +219,8 @@ automationQueue.process('process-automation', async (job: Job<AutomationJob>) =>
 
     throw error
   }
-})
+  })
+}
 
 /**
  * Processa automação por palavra-chave
@@ -341,33 +347,39 @@ async function processScheduleAutomation(automation: any, conversation: any, tri
  * Função para adicionar job de mensagem à fila
  */
 export async function queueMessage(data: MessageJob): Promise<void> {
-  await messageQueue.add('send-message', data, {
-    attempts: 3,
-    backoff: 'exponential',
-    delay: 1000,
-  })
+  if (messageQueue) {
+    await messageQueue.add('send-message', data, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      delay: 1000,
+    })
+  }
 }
 
 /**
  * Função para adicionar job de webhook à fila
  */
 export async function queueWebhook(data: WebhookJob): Promise<void> {
-  await webhookQueue.add('process-webhook', data, {
-    attempts: 5,
-    backoff: 'exponential',
-    delay: 500,
-  })
+  if (webhookQueue) {
+    await webhookQueue.add('process-webhook', data, {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 1000 },
+      delay: 500,
+    })
+  }
 }
 
 /**
  * Função para adicionar job de automação à fila
  */
 export async function queueAutomation(data: AutomationJob): Promise<void> {
-  await automationQueue.add('process-automation', data, {
-    attempts: 3,
-    backoff: 'exponential',
-    delay: 2000,
-  })
+  if (automationQueue) {
+    await automationQueue.add('process-automation', data, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 3000 },
+      delay: 2000,
+    })
+  }
 }
 
 console.log('🔄 Queue processors initialized')

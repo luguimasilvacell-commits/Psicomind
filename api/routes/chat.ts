@@ -2,7 +2,7 @@
  * Rotas do sistema de chat WhatsApp Web
  */
 import { Router, type Request, type Response } from 'express';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateSupabase } from '../middleware/auth.js';
 import { chatService } from '../services/chatService.js';
 import { logSensitiveAction } from '../middleware/auditLogger.js';
 import multer from 'multer';
@@ -34,7 +34,7 @@ const upload = multer({
  * GET /api/chat/conversations
  */
 router.get('/conversations',
-  authenticateToken,
+  authenticateSupabase,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const psychologistId = req.user?.userId;
@@ -74,7 +74,7 @@ router.get('/conversations',
  * GET /api/chat/conversations/:conversationId/messages
  */
 router.get('/conversations/:conversationId/messages',
-  authenticateToken,
+  authenticateSupabase,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const psychologistId = req.user?.userId;
@@ -115,7 +115,7 @@ router.get('/conversations/:conversationId/messages',
  * POST /api/chat/conversations/:conversationId/messages
  */
 router.post('/conversations/:conversationId/messages',
-  authenticateToken,
+  authenticateSupabase,
   upload.single('media'),
   logSensitiveAction('send_message', 'chat'),
   async (req: Request, res: Response): Promise<void> => {
@@ -167,7 +167,7 @@ router.post('/conversations/:conversationId/messages',
  * PUT /api/chat/conversations/:conversationId/read
  */
 router.put('/conversations/:conversationId/read',
-  authenticateToken,
+  authenticateSupabase,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const psychologistId = req.user?.userId;
@@ -202,7 +202,7 @@ router.put('/conversations/:conversationId/read',
  * GET /api/chat/search
  */
 router.get('/search',
-  authenticateToken,
+  authenticateSupabase,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const psychologistId = req.user?.userId;
@@ -250,7 +250,7 @@ router.get('/search',
  * GET /api/chat/stats
  */
 router.get('/stats',
-  authenticateToken,
+  authenticateSupabase,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const psychologistId = req.user?.userId;
@@ -284,7 +284,7 @@ router.get('/stats',
  * GET /api/chat/conversations/:conversationId/export
  */
 router.get('/conversations/:conversationId/export',
-  authenticateToken,
+  authenticateSupabase,
   logSensitiveAction('export_conversation', 'chat'),
   async (req: Request, res: Response): Promise<void> => {
     try {

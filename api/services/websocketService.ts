@@ -1,4 +1,4 @@
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../lib/supabase.js';
@@ -38,23 +38,32 @@ class WebSocketService {
           return next(new Error('Authentication error: No token provided'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        // Verificar token usando Supabase auth
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
         
-        // Verificar se o usuário existe no Supabase
-        const { data: user, error } = await supabase
-          .from('psicologos')
-          .select('id')
-          .eq('id', decoded.sub)
-          .single();
-
-        if (error || !user) {
-          return next(new Error('Authentication error: Invalid user'));
+        if (authError || !user) {
+          console.log('❌ [WebSocket] Token inválido:', authError?.message);
+          return next(new Error('Authentication error: Invalid token'));
         }
 
-        socket.userId = decoded.sub;
-        socket.psicologoId = decoded.sub;
+        // Verificar se o usuário existe na tabela psicologos
+        const { data: psicologo, error: psicologoError } = await supabase
+          .from('psicologos')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+
+        if (psicologoError || !psicologo) {
+          console.log('❌ [WebSocket] Psicólogo não encontrado:', psicologoError?.message);
+          return next(new Error('Authentication error: User not found'));
+        }
+
+        console.log('✅ [WebSocket] Usuário autenticado:', user.email);
+        socket.userId = user.id;
+        socket.psicologoId = user.id;
         next();
       } catch (error) {
+        console.error('❌ [WebSocket] Erro na autenticação:', error);
         next(new Error('Authentication error: Invalid token'));
       }
     });

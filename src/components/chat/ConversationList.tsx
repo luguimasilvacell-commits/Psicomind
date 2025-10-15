@@ -13,6 +13,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
   onSearchChange,
   loading
 }) => {
+  console.log('🎯 [ConversationList] Componente carregado', {
+    conversations: conversations?.length,
+    selectedConversationId,
+    loading
+  });
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -99,7 +105,13 @@ const ConversationList: React.FC<ConversationListProps> = ({
             {conversations.map((conversation) => (
               <div
                 key={conversation.id}
-                onClick={() => onSelectConversation(conversation)}
+                onClick={() => {
+                  console.log('🎯 [ConversationList] Conversa clicada:', {
+                    id: conversation.id,
+                    patientName: conversation.patient?.nome
+                  });
+                  onSelectConversation(conversation);
+                }}
                 className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedConversationId === conversation.id 
                     ? 'bg-blue-50 border-r-2 border-blue-500' 

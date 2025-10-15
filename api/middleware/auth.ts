@@ -3,6 +3,7 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { supabase } from '../lib/supabase.js';
 
 // Extend Request interface to include user
 declare global {
@@ -118,6 +119,69 @@ export const requireAdmin = (
   }
 
   next();
+};
+
+/**
+ * Middleware de autenticação Supabase
+ */
+export const authenticateSupabase = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        message: 'Token de acesso requerido'
+      });
+      return;
+    }
+
+    // Verificar token com Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      res.status(401).json({
+        success: false,
+        message: 'Token inválido ou expirado'
+      });
+      return;
+    }
+
+    // Buscar dados do psicólogo
+    const { data: psicologo, error: psicologoError } = await supabase
+      .from('psicologos')
+      .select('id, email, nome, role')
+      .eq('id', user.id)
+      .single();
+
+    if (psicologoError || !psicologo) {
+      res.status(401).json({
+        success: false,
+        message: 'Usuário não encontrado'
+      });
+      return;
+    }
+
+    // Add user info to request
+    req.user = {
+      userId: user.id,
+      email: user.email || psicologo.email,
+      type: psicologo.role || 'psicologo'
+    };
+
+    next();
+  } catch (error) {
+    console.error('Error in Supabase authentication middleware:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
 };
 
 /**

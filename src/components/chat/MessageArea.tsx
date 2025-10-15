@@ -28,6 +28,11 @@ const MessageArea: React.FC<MessageAreaProps> = ({
   onMarkAsRead,
   getWebhookStatus
 }) => {
+  console.log('🎯 [MessageArea] Componente carregado', {
+    conversation: conversation?.id,
+    messages: messages?.length,
+    loading
+  });
   const [messageText, setMessageText] = React.useState('');
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [isTyping, setIsTyping] = React.useState(false);
@@ -61,10 +66,49 @@ const MessageArea: React.FC<MessageAreaProps> = ({
       : 'document'
       : 'text';
 
+    // Enviar mensagem primeiro
     await onSendMessage(messageText.trim(), messageType, selectedFile || undefined);
+    
+    // Chamar webhook do n8n de forma assíncrona (não bloqueia o envio)
+    callN8nWebhook(messageText.trim(), messageType);
     
     setMessageText('');
     setSelectedFile(null);
+  };
+
+  const callN8nWebhook = async (messageContent: string, messageType: MessageType) => {
+    if (!conversation) return;
+
+    try {
+      const params = new URLSearchParams({
+        messageContent: messageContent,
+        messageType: messageType,
+        patientName: conversation.patient?.nome || 'Paciente',
+        phoneNumber: conversation.patient?.telefone || '',
+        conversationId: conversation.id,
+        timestamp: new Date().toISOString(),
+        senderType: 'psychologist'
+      });
+
+      const webhookUrl = `https://o0j5j1jw-n8n.cloudfy.cloud/webhook/22ce49f0-23b9-4f5c-bd4d-34b60fdaba99?${params.toString()}`;
+      
+      console.log('📤 [TESTE WEBHOOK] Chamando webhook n8n:', webhookUrl);
+      console.log('📤 [TESTE WEBHOOK] Parâmetros:', Object.fromEntries(params));
+
+      const response = await fetch(webhookUrl, {
+        method: 'GET'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ [TESTE WEBHOOK] Webhook n8n enviado com sucesso:', result);
+      } else {
+        console.warn('⚠️ [TESTE WEBHOOK] Webhook n8n retornou status:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [TESTE WEBHOOK] Erro ao enviar webhook n8n:', error);
+      // Não exibir erro para o usuário para não interromper o fluxo
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

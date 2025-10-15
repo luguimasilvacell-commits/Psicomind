@@ -42,6 +42,8 @@ export const LazyLoader: React.FC<LazyLoaderProps> = ({
 
 // Componente específico para páginas
 export const PageLoader: React.FC<LazyLoaderProps> = ({ children }) => {
+  console.log('🎯 [PageLoader] Carregando página...');
+  
   const pageFallback = (
     <div className="space-y-6">
       <div className="flex justify-between items-center">

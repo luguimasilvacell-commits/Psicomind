@@ -18,6 +18,12 @@ import Register from './pages/Register'
 // Import Dashboard directly for testing
 import Dashboard from './pages/Dashboard'
 
+// Import Chat directly for testing
+import Chat from './pages/Chat'
+
+// Import TestPage for debugging
+import TestPage from './pages/TestPage'
+
 // Lazy load main pages
 const Pacientes = React.lazy(() => import('./pages/Pacientes'))
 const Agendamentos = React.lazy(() => import('./pages/Agendamentos'))
@@ -27,7 +33,7 @@ const SystemLogs = React.lazy(() => import('./pages/SystemLogs'))
 const Relatorios = React.lazy(() => import('./pages/Relatorios'))
 
 // Chat pages
-const Chat = React.lazy(() => import('./pages/Chat'))
+// const Chat = React.lazy(() => import('./pages/Chat'))
 const Automations = React.lazy(() => import('./pages/Automations'))
 
 // WhatsApp pages
@@ -103,6 +109,11 @@ export default function App() {
             <Route path="chat" element={
               <PageLoader>
                 <Chat />
+              </PageLoader>
+            } />
+            <Route path="test" element={
+              <PageLoader>
+                <TestPage />
               </PageLoader>
             } />
             <Route path="automations" element={

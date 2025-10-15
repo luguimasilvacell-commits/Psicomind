@@ -20,6 +20,8 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export const useChat = (): UseChatReturn => {
+  console.log('🎯 [useChat] Hook inicializado');
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,7 +30,8 @@ export const useChat = (): UseChatReturn => {
   const [searchTerm, setSearchTerm] = useState('');
   const [webhookStatuses, setWebhookStatuses] = useState<Map<string, WebhookStatus>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { token } = useAuthStore();
+  const { user } = useAuthStore();
+  const [jwtToken, setJwtToken] = useState<string | null>(null);
   const socket = useSocket();
 
   // Initialize webhook service
@@ -36,13 +39,56 @@ export const useChat = (): UseChatReturn => {
     initializeMessageWebhookService();
   }, []);
 
+  // Get JWT token from local API
+  const getJwtToken = useCallback(async () => {
+    if (!user?.email) return null;
+    
+    console.log('🔑 [useChat] Obtendo JWT token para:', user.email);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          password: 'admin123' // This should be handled more securely
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [useChat] JWT token obtido com sucesso');
+        console.log('📋 [useChat] Dados retornados pela API:', data);
+        const token = data.data?.token || data.token; // Tentar ambos os caminhos
+        console.log('🔄 [useChat] Atualizando estado jwtToken:', token ? 'token válido' : 'token inválido');
+        setJwtToken(token);
+        return token;
+      } else {
+        console.error('❌ [useChat] Erro ao obter JWT token:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [useChat] Erro ao obter JWT token:', error);
+    }
+    return null;
+  }, [user?.email]);
+
+  // Get JWT token when user changes
+  useEffect(() => {
+    if (user?.email) {
+      getJwtToken();
+    }
+  }, [user?.email, getJwtToken]);
+
   // API helper function
   const apiCall = useCallback(async (endpoint: string, options: RequestInit = {}) => {
     const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${jwtToken}`,
+        'User-Agent': 'PsicoMind-Frontend/1.0',
         ...options.headers,
       },
     });
@@ -53,11 +99,16 @@ export const useChat = (): UseChatReturn => {
     }
 
     return response.json();
-  }, [token]);
+  }, [jwtToken]);
 
   // Load conversations
   const refreshConversations = useCallback(async () => {
-    if (!token) return;
+    console.log('💬 [useChat] refreshConversations chamado, jwtToken:', !!jwtToken);
+    
+    if (!jwtToken) {
+      console.log('⚠️ [useChat] JWT token não disponível, aguardando...');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -66,31 +117,47 @@ export const useChat = (): UseChatReturn => {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
       
-      const response: ApiResponse<Conversation[]> = await apiCall(
-        `/chat/conversations?${params.toString()}`
+      console.log('🔄 [useChat] Carregando conversas da API...');
+      
+      const response: any = await apiCall(
+        `/conversations?${params.toString()}`
       );
 
-      if (response.success && response.data) {
-        setConversations(response.data);
+      console.log('📋 [useChat] Resposta da API:', response);
+
+      if (response.success && response.conversations) {
+        console.log('✅ [useChat] Conversas carregadas:', response.conversations.length);
+        setConversations(response.conversations);
+      } else {
+        console.error('❌ [useChat] Erro na resposta da API:', response);
       }
     } catch (err) {
-      console.error('Error loading conversations:', err);
+      console.error('❌ [useChat] Erro ao carregar conversas:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar conversas');
     } finally {
       setLoading(false);
     }
-  }, [token, searchTerm, apiCall]);
+  }, [jwtToken, searchTerm, apiCall]);
+
+  // Load conversations when JWT token is available
+  useEffect(() => {
+    console.log('🔄 [useChat] useEffect disparado - jwtToken:', !!jwtToken);
+    if (jwtToken) {
+      console.log('🚀 [useChat] JWT token disponível, carregando conversas...');
+      refreshConversations();
+    }
+  }, [jwtToken]); // Removido refreshConversations das dependências para evitar loop
 
   // Load messages for selected conversation
   const refreshMessages = useCallback(async () => {
-    if (!selectedConversation || !token) return;
+    if (!selectedConversation || !jwtToken) return;
 
     try {
       setLoading(true);
       setError(null);
 
       const response: ApiResponse<Message[]> = await apiCall(
-        `/chat/conversations/${selectedConversation.id}/messages`
+        `/conversations/${selectedConversation.id}/messages`
       );
 
       if (response.success && response.data) {
@@ -107,10 +174,14 @@ export const useChat = (): UseChatReturn => {
     } finally {
       setLoading(false);
     }
-  }, [selectedConversation, token, apiCall]);
+  }, [selectedConversation, jwtToken, apiCall]);
 
   // Select conversation
   const selectConversation = useCallback((conversation: Conversation) => {
+    console.log('🎯 [useChat] selectConversation chamado', {
+      conversationId: conversation.id,
+      patientName: conversation.patient?.nome
+    });
     setSelectedConversation(conversation);
     setMessages([]); // Clear previous messages
   }, []);
@@ -121,7 +192,7 @@ export const useChat = (): UseChatReturn => {
     type: MessageType = 'text', 
     file?: File
   ) => {
-    if (!selectedConversation || !token) return;
+    if (!selectedConversation || !jwtToken) return;
 
     try {
       setError(null);
@@ -135,11 +206,12 @@ export const useChat = (): UseChatReturn => {
       }
 
       const response = await fetch(
-        `${API_BASE_URL}/api/chat/conversations/${selectedConversation.id}/messages`,
+        `${API_BASE_URL}/api/conversations/${selectedConversation.id}/messages`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${jwtToken}`,
+            'User-Agent': 'PsicoMind-Frontend/1.0',
           },
           body: formData,
         }
@@ -198,15 +270,15 @@ export const useChat = (): UseChatReturn => {
       console.error('Error sending message:', err);
       setError(err instanceof Error ? err.message : 'Erro ao enviar mensagem');
     }
-  }, [selectedConversation, token]);
+  }, [selectedConversation, jwtToken]);
 
   // Mark messages as read
   const markAsRead = useCallback(async () => {
-    if (!selectedConversation || !token) return;
+    if (!selectedConversation || !jwtToken) return;
 
     try {
       await apiCall(
-        `/chat/conversations/${selectedConversation.id}/read`,
+        `/conversations/${selectedConversation.id}/read`,
         { method: 'PUT' }
       );
 
@@ -229,7 +301,7 @@ export const useChat = (): UseChatReturn => {
     } catch (err) {
       console.error('Error marking messages as read:', err);
     }
-  }, [selectedConversation, token, apiCall]);
+  }, [selectedConversation, jwtToken, apiCall]);
 
   // Socket event handlers
   useEffect(() => {
